@@ -1,0 +1,13 @@
+# go2rtc config for the J15 camera. go2rtc only connects to the robot while
+# someone is watching, so the robot camera stays idle the rest of the time.
+#
+# Gives you:
+#   rtsp://<go2rtc-host>:8554/j15     (Home Assistant, Frigate, VLC)
+#   http://<go2rtc-host>:1984/         (WebRTC player in the go2rtc web UI)
+#
+# Replace ROBOT_IP with your robot's address. ffmpeg must be available to
+# go2rtc (it is in the official container and the Home Assistant add-on).
+
+streams:
+  j15:
+    - exec:ffmpeg -hide_banner -use_wallclock_as_timestamps 1 -f h264 -i tcp://ROBOT_IP:8555 -c copy -rtsp_transport tcp -f rtsp {output}

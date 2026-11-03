@@ -1,0 +1,10 @@
+/build/
+
+# Never commit firmware or log dumps: they contain Wi-Fi credentials,
+# device keys and vendor binaries.
+*.tar
+*.tar.gz
+*.dtb
+*.h264
+*.bin
+dumps/
