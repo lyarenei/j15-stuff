@@ -6,6 +6,7 @@
 #   ./install.sh restart   <robot-ip> [ssh options]   restart (e.g. after editing the config)
 #   ./install.sh status    <robot-ip> [ssh options]   show whether it is running
 #   ./install.sh check     <robot-ip> [ssh options]   run the camera pipeline diagnostic
+#   ./install.sh collect-logs <robot-ip> [ssh options]  save robot logs + dmesg to a local .tar
 #
 # Anything after the robot address is passed to ssh unchanged, e.g.
 #   ./install.sh install 192.168.1.50 -i ~/.ssh/robot -p 2222
@@ -17,7 +18,7 @@ HOOK=/oem/_root_postboot.sh
 MARKER="# j15-camstream"
 
 usage() {
-    sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -136,6 +137,13 @@ EOF
 check)
     push "$HERE/robot/camera-check.sh" /tmp/camera-check.sh 755
     remote /tmp/camera-check.sh || true
+    ;;
+collect-logs)
+    # /userdata/logs is RAM-backed and lost at reboot, so grab it first.
+    out="j15-logs-$(date +%Y%m%d-%H%M%S).tar"
+    echo "Collecting logs into $out..."
+    remote 'dmesg > /tmp/dmesg-now.txt; tar -cf - /userdata/logs/app /tmp/dmesg-now.txt 2>/dev/null; rm -f /tmp/dmesg-now.txt' > "$out"
+    echo "Saved $out ($(du -h "$out" | cut -f1)). It contains device logs; don't share it publicly."
     ;;
 *)
     usage 2

@@ -35,6 +35,9 @@ start. `install.sh` adds a single marked line there.
 SSH (`S97dropbear.sh`) starts before the hook, so a broken hook can't lock
 you out.
 
+The full boot chain, how nodes are started (`start-dushu`), and Midea's
+built-in debug mode are in [modifying-firmware.md](modifying-firmware.md).
+
 ## ubus
 
 `ubusd` runs on a **non-default socket**, so every call needs `-s`:
@@ -167,15 +170,29 @@ anything.
 | `/tmp/valetudo.log` | Valetudo |
 
 `/userdata/logs` is a 30 MB tmpfs, so everything in it is lost at reboot.
+`./install.sh collect-logs <ip>` saves it all, plus `dmesg`, to a local `.tar`.
+
+Log lines are glog format:
+`<I|W|E|F>MMDD HH:MM:SS.micro <tid>] [<TAG>] Class::Func - message` (no year).
+The planner also writes debug artefacts next to its logs (maps as
+`.ppm`/`.pgm`, zone division dumps, per-task `.gz` snapshots).
+
+## Motor controller states seen by the planner
+
+`planner_node` converts the motor controller's enums to its own with lookup
+tables (`std::unordered_map` built from static pair arrays). A value
+missing from a table is logged as `PlannerNode::_toPlannerMcuStatus -
+<field> error=<value>`. Two tables have been read so far:
+
+| Table | Values covered | Notes |
+|---|---|---|
+| `MCU::MopLiftState` | 0–5 | contains a duplicate `1→1` entry (harmless) |
+| `MCU::MopStretchState` | 0–12 | the controller sometimes sends 13 |
+
+Details, observed state sequences and the open mop investigation are in
+[mop-lift-investigation.md](mop-lift-investigation.md).
 
 ## Method notes
 
-- Used to find all of the above: `strings` and `llvm-nm -D` on the
-  binaries, Hopper and `llvm-objdump` for decompiling and disassembly,
-  `ls /tmp /dev/shm` on the robot to see which topics exist and which are
-  active, and a dump of the subscriber callback contents.
-- The mangled names in `libsample_plugin.so` give exact argument types.
-  Return types aren't encoded in a mangled name, so they're inferred from
-  the disassembly.
-- Vendor log strings are very detailed. Searching them (`strings -a`) is
-  usually the quickest way to find the code responsible for something.
+See [research-workflow.md](research-workflow.md) for the tools and techniques
+used, how to dump data from the robot, and the exact binaries examined.

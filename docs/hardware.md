@@ -49,6 +49,24 @@ The camera connects to the main board with a flat ribbon cable. On the unit
 examined, that cable had worked loose, which made the camera completely dead
 (see [camera-troubleshooting.md](camera-troubleshooting.md)).
 
+## Actuators
+
+Most motors (wheels, mops, mop lift, mop arm, pumps, the dock) are run by a
+separate motor/sensor microcontroller. Linux sends it commands over the
+`mcu-request-*` IPC topics (see
+[firmware-internals.md](firmware-internals.md)).
+
+A few things are driven straight from the SoC through `midea-pwm` device
+tree nodes. Changes are logged to `dmesg` (`pwm_<name> set level N`):
+
+| Node | Status | Probably |
+|---|---|---|
+| `pwm_left_hand_brush` | okay | left side brush |
+| `pwm_right_turn_right` | okay, `smooth-mode` | right side brush rotation (ramps in steps of 10) |
+| `pwm_right_brush_reversal` | okay, `smooth-mode` | right side brush reverse |
+| `pwm_fill_light_control` | okay | camera fill light |
+| `pwm_radar_speed_control` | disabled | |
+
 ## Useful tools already on the robot
 
 `media-ctl`, `v4l2-ctl`, `i2cdetect`, `i2cget`, `i2cset`, `i2ctransfer`,

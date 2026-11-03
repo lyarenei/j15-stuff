@@ -1,4 +1,5 @@
 /build/
+.DS_Store
 
 # Never commit firmware or log dumps: they contain Wi-Fi credentials,
 # device keys and vendor binaries.

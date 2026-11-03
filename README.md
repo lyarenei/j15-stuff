@@ -8,8 +8,21 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   browser (through [go2rtc](https://github.com/AlexxIT/go2rtc)).
 - **camera-check**: a diagnostic that finds where the camera pipeline breaks
   (dead sensor, loose cable, driver, capture).
-- **[docs/](docs/)**: hardware and firmware findings (camera pipeline, ubus
-  API, Midea's IPC protocol, the video frame format).
+- **[docs/](docs/)**: hardware and firmware findings, and ongoing
+  investigations:
+
+  | Doc | Contents |
+  |---|---|
+  | [hardware.md](docs/hardware.md) | SoC, storage, camera pipeline, sensors, power rails |
+  | [camera-troubleshooting.md](docs/camera-troubleshooting.md) | diagnosing a dead camera (solved: loose ribbon cable) |
+  | [firmware-internals.md](docs/firmware-internals.md) | processes, ubus API, "mass" IPC, video frame format, logs |
+  | [modifying-firmware.md](docs/modifying-firmware.md) | boot chain, vendor debug mode, ways to change behaviour, risks |
+  | [mop-lift-investigation.md](docs/mop-lift-investigation.md) | **open**: right mop pad sometimes doesn't lift |
+  | [research-workflow.md](docs/research-workflow.md) | how to dump, analyse and reproduce these findings |
+
+- **[tools/](tools/)**: helper scripts for analysis on your computer:
+  `mop-timeline.py` (mop events from robot logs) and `fdt2dts.py`
+  (device tree to text).
 
 ## Disclaimer
 
@@ -117,6 +130,7 @@ Other commands:
 ./install.sh status    <ip> [ssh options]   # running? listening? boot hook present? last log lines
 ./install.sh restart   <ip> [ssh options]   # after editing /userdata/camstream.conf
 ./install.sh check     <ip> [ssh options]   # camera pipeline diagnostic
+./install.sh collect-logs <ip> [ssh options]  # save robot logs + dmesg to ./j15-logs-<time>.tar
 ./install.sh uninstall <ip> [ssh options]   # remove everything, including the boot hook
 ```
 
