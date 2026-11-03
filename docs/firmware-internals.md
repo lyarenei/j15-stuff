@@ -192,6 +192,14 @@ missing from a table is logged as `PlannerNode::_toPlannerMcuStatus -
 Details, observed state sequences and the open mop investigation are in
 [mop-lift-investigation.md](mop-lift-investigation.md).
 
+## Room cleaning order
+
+For a room selection, `manager_node` (`CMapHandler::SequenceRoomItem`)
+ignores the order of the request. Rooms with a stored per-room `cleanSeq`
+come first, the rest follow the firmware's proximity ranking. `planner_node`
+then cleans in the order it receives. Details and the planned patch are in
+[room-order-investigation.md](room-order-investigation.md).
+
 ## Method notes
 
 See [research-workflow.md](research-workflow.md) for the tools and techniques
