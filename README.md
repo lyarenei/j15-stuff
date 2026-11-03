@@ -11,6 +11,17 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 - **[docs/](docs/)**: hardware and firmware findings (camera pipeline, ubus
   API, Midea's IPC protocol, the video frame format).
 
+## Disclaimer
+
+This modifies a device you own. It only adds files
+in `/userdata` and one line in `/oem/_root_postboot.sh`, and
+`./install.sh uninstall` removes both.
+
+I have absolutely no idea what I am doing, I would not be able to do something
+like this without Claude or other LLMs.
+
+ALWAYS USE AT YOUR OWN RISK
+
 ## Requirements
 
 - A rooted J15 with SSH access as `root` (for example, after installing
@@ -192,9 +203,3 @@ through your router.
 
 Public domain, under the [Unlicense](LICENSE). No rights reserved and no
 warranty.
-
-## Disclaimer
-
-Not affiliated with Midea. This modifies a device you own. It only adds files
-in `/userdata` and one line in `/oem/_root_postboot.sh`, and
-`./install.sh uninstall` removes both. Use at your own risk.
