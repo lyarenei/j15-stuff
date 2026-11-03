@@ -24,6 +24,28 @@ this:
 | `stream.bin` | first `camera_stream` dump (32-byte shared-memory descriptors) |
 | `camstream-prototype/` | pre-repo version of `camstream` |
 
+These dumps were **sanitized on 2026-11-03**, and the archives were rebuilt
+from the cleaned folders:
+
+- **Removed:** Wi-Fi config, device key, certificate, license and serial
+  files, BLE pairing keys, cloud registration info, `authorized_keys`,
+  `/etc/shadow`, SSH host keys, the Valetudo CA, the vendor
+  `/usr/ssl/private.pem.key` and certificate, the voice-assistant license
+  and factory test info.
+- **Removed (home layout):** `/oem/slam` (saved maps, rooms, zones, dock
+  position, trajectories), and the map images and pose dumps in the logs
+  (`*.ppm`, `*.pgm`, `*.jpg`, `*.map.gz`, per-task `*Task-*.gz` snapshots,
+  zone division, loop-checker and `slam/{local,global,wheretogo}-*` files).
+- **Removed:** cloud-connection logs (`/userdata/logs/iot`) and core dumps.
+- **Redacted:** CPU serial and MAC addresses in `dmesg-boot.txt`, replaced
+  with `<CPU_SERIAL>` and `<MAC>`.
+- **Kept:** all binaries and stock configs, the text logs, version files,
+  MCU logs (`ulog_mcu.ulg-*`) and crash backtraces.
+
+Apply the same treatment to new dumps before keeping them around.
+`./install.sh collect-logs` already skips `/userdata/logs/iot`, but its
+archive still contains map images.
+
 ## Getting data off the robot
 
 The robot's dropbear has no `scp`/`sftp`, so everything goes over plain ssh.

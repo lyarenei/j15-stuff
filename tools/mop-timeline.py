@@ -144,16 +144,20 @@ def main():
     if args.errors:
         events = [e for e in events if ERROR_RE.search(e[5])]
 
-    last, repeat = None, 0
+    # Collapse identical messages only while they keep coming (gap <= 2 s), so
+    # separate bursts stay separate even when filtering removes what's between.
+    last, last_t, repeat = None, None, 0
     for mmdd, hms, us, level, source, msg in events:
         text = clean(msg)
-        if text == last:
+        t = to_dt(mmdd, hms)
+        if text == last and (t - last_t).total_seconds() <= 2:
             repeat += 1
+            last_t = t
             continue
         if repeat:
             print(f"{'':24}(repeated {repeat}x)")
         repeat = 0
-        last = text
+        last, last_t = text, t
         print(f"{mmdd} {hms}.{us[:3]} {level} {source:7} {text}")
     if repeat:
         print(f"{'':24}(repeated {repeat}x)")
