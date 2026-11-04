@@ -213,6 +213,13 @@ be overridden at runtime with MSmart `SET_VARIOUS_TOGGLES` (`0x9C`):
 `0x26` mop extension, `0x2e` gap, `0x2f` furniture legs. Details are in
 [corner-cleaning-investigation.md](corner-cleaning-investigation.md).
 
+## Valetudo protocol fit
+
+Valetudo's commands, payload layouts and status offsets match the firmware,
+but several labels, enums and error codes don't, and many firmware features
+aren't exposed. The full comparison is in
+[valetudo-comparison.md](valetudo-comparison.md).
+
 ## Dock water tanks
 
 The dock reports only binary tank states over BLE (`sensor_status` bits:

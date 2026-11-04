@@ -89,7 +89,13 @@ the order comes entirely from the ranking. That's the "random" order.
   `ThingsModel::CommandRoomInfo`, also exists.
 - Which MSmart packet reaches `SetRoomInfo` is **not known**. Valetudo
   doesn't send one: its segment names live only on the Valetudo side
-  (`MideaMapHacksProvider`).
+  (`MideaMapHacksProvider`). Probably SETTING `0x2B`
+  (`handleIotMsg0x02_0x2B` → `CCentralController::SetRoomInfo`; fan at
+  byte +4, water +5, route +7 per room). Which byte is `cleanSeq` isn't
+  decoded yet, see [valetudo-comparison.md](valetudo-comparison.md).
+- The 0x03 handler reads only room id and count per slot, plus the first
+  room's mode byte; Valetudo's per-room fan and water bytes are ignored
+  ([features.md](valetudo-comparison/features.md), M3).
 
 ### `planner_node` keeps the order it receives
 
