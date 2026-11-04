@@ -38,15 +38,15 @@ maps, addresses and Valetudo file:line references:
 Most items below are fixed or worked around by the patched Valetudo build,
 see [valetudo-patches.md](valetudo-patches.md#patches).
 
-## Safety note: cliff sensors
+## Cliff sensor polarity
 
-Not a Valetudo bug, but found during this work. Every status frame in the
-saved logs (2026-09-27 to 2026-11-02) has the stored `cliff-sensor`
-setting = 1. The 0x63 (`SET_STAIRLESS_MODE`) handler stores the value
-unchanged, the planner logs it as `disale_cliff_sensor` (sic), and Valetudo's
-"Cliff Sensors" quirk sends 1 for "off". So the stored setting says the
-cliff sensors were **disabled**. Check the quirk before running the robot
-near stairs. Details: [status-packet.md](valetudo-comparison/status-packet.md#d-open-questions),
+Every status frame in the saved logs (2026-09-27 to 2026-11-02) has the
+stored `cliff-sensor` setting = 1. The 0x63 (`SET_STAIRLESS_MODE`) handler
+stores the value unchanged, the planner logs it as `disale_cliff_sensor`
+(sic), and Valetudo's "Cliff Sensors" quirk sends 1 for "off". The owner
+confirmed the sensors are intentionally off on this unit (no drops in the
+home), which matches: 1 means disabled, and Valetudo's polarity is right.
+Details: [status-packet.md](valetudo-comparison/status-packet.md#d-open-questions),
 question 1.
 
 ## All mismatches
@@ -155,8 +155,8 @@ Don't expose casually: 0x9C `0x11` (SLAM version, reboots the LDS), `0x13`
 ## Open questions
 
 - What the planner's avoidance modes NORMAL / SMART / SUPER do (#2).
-- How the planner acts on `disable_cliff_sensor`, and whether the user ever
-  turned the sensors off (safety note).
+- How the planner acts on `disable_cliff_sensor` (polarity is settled, see
+  [Cliff sensor polarity](#cliff-sensor-polarity)).
 - Carpet strategy enum values (#10, #14), mop drying method 1 vs 2 (#5), hot
   wash modes (#11), floor materials 1 and 4 (#19).
 - Whether `iot_node_msmart` rewrites any byte between `manager_node` and
