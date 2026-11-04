@@ -8,6 +8,8 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   browser (through [go2rtc](https://github.com/AlexxIT/go2rtc)).
 - **camera-check**: a diagnostic that finds where the camera pipeline breaks
   (dead sensor, loose cable, driver, capture).
+- **persistlog**: keeps the robot's logs across reboots (the firmware keeps
+  them in RAM, and only about a day's worth). Installed separately.
 - **[docs/](docs/)**: hardware and firmware findings, and ongoing
   investigations:
 
@@ -20,6 +22,7 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   | [mop-lift-investigation.md](docs/mop-lift-investigation.md) | **open**: right mop pad sometimes doesn't lift |
   | [room-order-investigation.md](docs/room-order-investigation.md) | rooms aren't cleaned in the selected order: cause and planned patch |
   | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, what Valetudo exposes, options for level warnings |
+  | [persistent-logs.md](docs/persistent-logs.md) | how the firmware rotates logs, and keeping them across reboots |
   | [research-workflow.md](docs/research-workflow.md) | how to dump, analyse and reproduce these findings |
 
 - **[tools/](tools/)**: helper scripts for analysis on your computer:
@@ -28,9 +31,9 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 
 ## Disclaimer
 
-This modifies a device you own. It only adds files
-in `/userdata` and one line in `/oem/_root_postboot.sh`, and
-`./install.sh uninstall` removes both.
+This modifies a device you own. Each component only adds files
+in `/userdata` and one line in `/oem/_root_postboot.sh`, and its uninstall
+command removes both (persistlog keeps the logs it saved).
 
 I have absolutely no idea what I am doing, I would not be able to do something
 like this without Claude or other LLMs.
@@ -135,6 +138,25 @@ Other commands:
 ./install.sh collect-logs <ip> [ssh options]  # save robot logs + dmesg to ./j15-logs-<time>.tar
 ./install.sh uninstall <ip> [ssh options]   # remove everything, including the boot hook
 ```
+
+## Persistent logs
+
+The firmware writes its logs to a 30 MB RAM disk and keeps only the last few
+files per process, so most of them cover less than a day and all of them are
+gone after a reboot. `persistlog` copies them to flash (`/userdata/persist-logs`,
+capped at 64 MB, one folder per boot) every 10 minutes and on shutdown. It
+doesn't need camstream and doesn't need a build:
+
+```sh
+./install.sh persistlog-install   <ip> [ssh options]
+./install.sh persistlog-status    <ip> [ssh options]   # running? boot hook? store size, saved boots
+./install.sh persistlog-uninstall <ip> [ssh options]   # keeps the saved logs
+```
+
+`./install.sh collect-logs` includes the saved logs. Settings (size cap,
+interval, extra logs) are in `/userdata/persistlog.conf`. Cloud connection
+logs, core dumps and map images are never copied. Details are in
+[docs/persistent-logs.md](docs/persistent-logs.md).
 
 ## Viewing in Home Assistant or a browser
 

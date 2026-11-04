@@ -171,6 +171,10 @@ anything.
 
 `/userdata/logs` is a 30 MB tmpfs, so everything in it is lost at reboot.
 `./install.sh collect-logs <ip>` saves it all, plus `dmesg`, to a local `.tar`.
+Each node keeps only 4–14 rotated files, which is less than a day for the
+chattier nodes. `persistlog` copies them to `/userdata` so they survive
+reboots. Rotation details and the design are in
+[persistent-logs.md](persistent-logs.md).
 
 Log lines are glog format:
 `<I|W|E|F>MMDD HH:MM:SS.micro <tid>] [<TAG>] Class::Func - message` (no year).
