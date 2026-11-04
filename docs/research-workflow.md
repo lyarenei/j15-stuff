@@ -150,6 +150,9 @@ Addresses in these docs are for these exact builds:
 | `/usr/navi/manager_node` | `049e9d56d2c0dee98209871deb74fa31006b3bcd730e8b8abaf2d072215b50da` |
 | `/usr/lib/libmotion.so` | `729c0c536dd8831886d1a5d1d35beff1eef8cb4c76f827fe5480ffee16c7f5f9` |
 | `/usr/navi/planner.json` | `27e9338adeca810347c3f5567b1eb684c3ccee77215345d3fbd157ed93d229ec` |
+| `/usr/bin/updateEngine` | `e6b3113a57134e99ca07ab6e11d336200d57d6c0b2d738f2454a7867edb88e38` |
+| `/usr/bin/recovery` | `bc33af3f15bdccac3cb0ff5120099d51a6e23098514952bbbea80e8de952d09a` |
+| `/usr/bin/midea_ota` | `ccce129ab5c3fcf36f94a6d0e2adce394f34f4fb3c35f63b60038b6fc3aa7804` |
 | `/usr/lib/libsample_plugin.so` | `5b3fbca5d8421e71cdf0ffe893587ce089f7970507eacf97abfa0276d66480f1` |
 
 Check with `sha256sum` on the robot before trusting any address.

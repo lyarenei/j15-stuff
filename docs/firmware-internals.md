@@ -228,6 +228,12 @@ clean tank fitted, dirty tank fitted, dirty tank full), published on
 during a mop wash. Details are in
 [water-tank-investigation.md](water-tank-investigation.md).
 
+## Flash layout and updates
+
+The NAND partitions, the stock OTA/recovery update chain, and how likely a
+reflash is to brick the robot are in
+[firmware-flashing-investigation.md](firmware-flashing-investigation.md).
+
 ## Method notes
 
 See [research-workflow.md](research-workflow.md) for the tools and techniques

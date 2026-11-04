@@ -133,8 +133,11 @@ A vendor mechanism for running modified software from `/userdata`:
 
 ## Don't touch
 
-- **The main firmware image / kernel.** Reflashing risks a brick, and the
-  boot log mentions signature checks (`F1 signature OK`).
+- **The bootloader (IDBlock, `uboot` partition) and `vnvm`.** Reflashing
+  boot or rootfs is recoverable through the stock recovery flow, but a broken
+  U-Boot needs USB MaskROM, and `vnvm` holds the device identity. Risks,
+  recovery paths and precautions are in
+  [firmware-flashing-investigation.md](firmware-flashing-investigation.md).
 - **The motor/sensor microcontroller firmware.** Motors, cliff sensors and
   mops run on a separate MCU. Linux only sends it commands
   (`mcu-request-*` topics).
