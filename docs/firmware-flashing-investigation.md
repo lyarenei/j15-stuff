@@ -299,8 +299,17 @@ Read in MaskROM after `rkdeveloptool db` of Radxa's
   key hash and turn on secure boot for good. Never boot a signed FIT on
   this robot.
 - So the brick-critical region is blocks 0–6 (GPT + both IDBs) plus the
-  `uboot` partition. A raw image of the whole NAND (`rl 0 0xffc00`) backs
-  all of it up.
+  `uboot` partition.
+- **A full read over USB stops at 32 MiB.** `rl 0 0xffc00` (2026-11-04)
+  printed 100% and produced a 0x1ff80000-byte file, but everything from
+  `0x2000000` (sector `0x10000`) on is `0xcc` filler. The first 32 MiB
+  (GPT, IDBs, vnvm, uboot, misc, license, recovery, start of boot) match the
+  Linux `nanddump`s exactly. [C] Cause not known yet: a 32 MiB access limit
+  in this usbplug's raw SLC NAND mode, or a silent transfer error in
+  `rkdeveloptool`. Until it's resolved, **the USB image isn't a restore
+  point past 32 MiB**: rootfs and userdata backups have to come from Linux
+  (`nanddump`, `/dev/ubiblock0_0`, tar of `/oem`). The brick-critical region
+  is inside the 32 MiB, so U-Boot and IDB restores over USB are unaffected.
 
 ### boot (mtd5) and recovery (mtd4)
 
@@ -418,8 +427,10 @@ recovery self-healing.
   short point on the main board.
 - Done 2026-11-04: MaskROM from Linux, unsigned loader accepted, IDBlock
   read and decoded (unsigned).
-- Take a full raw NAND image over USB (`rl 0 0xffc00`, 511.5 MiB) as the
-  ultimate restore point.
+- Find out why USB reads stop at 32 MiB (short reads across the boundary,
+  `rl 0x10000 0x100`), and whether `wl` has the same limit.
+- Raw `nanddump` of mtd6 and mtd7 from Linux, so the whole chip is backed
+  up at the raw level.
 - Confirm rkdeveloptool NAND support on RK356x with a stock loader.
 
 ## Method and binaries
