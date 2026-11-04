@@ -316,6 +316,22 @@ Read in MaskROM after `rkdeveloptool db` of Radxa's
   (`nanddump`, `/dev/ubiblock0_0`, tar of `/oem`). The brick-critical region
   is inside the 32 MiB, so U-Boot and IDB restores over USB are unaffected.
 
+### NAND health (2026-11-04)
+
+From `/sys/class/mtd/mtdN/*` and a full `nanddump` of every partition: [C]
+
+- ECC: 16 bits per 1024-byte step, `bitflip_threshold = 12` on all
+  partitions. Bad blocks: 0 everywhere. `ecc_failures`: 0 everywhere.
+- Corrected bitflips per full read: uboot 12 pages, recovery 50, boot 6,
+  rootfs 26, userdata 234; vnvm, misc and license none. **Every one was a
+  single-bit flip** (1 of 16 correctable).
+- [I] Normal for SLC NAND: read disturb on blocks written once and read at
+  every boot (rootfs erase counters are still 0–1). It's far below the
+  threshold of 12 at which UBI scrubs a block, so nothing gets rewritten,
+  and no action is needed. Worth re-checking with the same commands after
+  a year or so; pages climbing towards 8+ flips would need a refresh
+  (rewrite the same image).
+
 ### boot (mtd5) and recovery (mtd4)
 
 - Both are Android boot images v0 (`ANDROID!`), page size 2048, empty
