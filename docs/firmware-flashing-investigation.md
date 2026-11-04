@@ -146,9 +146,34 @@ cloud ─▶ iot_node ─(MD5, writes .sha256)─▶ /tmp/midea_ota_socket ─�
     `zig cc -target aarch64-linux-musl -static`) does it. Like
     `reboot -f`, it skips the init shutdown, so only `sync` protects the
     UBIFS volumes; run it with the robot idle.
-- Getting into **MaskROM** itself needs the BootROM to find no valid
-  IDBlock, which on a working unit means shorting a NAND line or a MaskROM
-  pad. The location on this board is unknown.
+- **MaskROM is reachable from Linux, no shorting needed.** Tested
+  2026-11-04: `reboot(2)` with `RESTART2 "loader"` makes the robot come up
+  as `Vid=0x2207,Pid=0x350a ... Maskrom` in `rkdeveloptool ld`, i.e. the
+  BootROM's USB mode, not U-Boot rockusb. [I] U-Boot took its
+  `Enter rockusb failed, fallback to bootrom...` path. In MaskROM only
+  `ld` works; `rci`, `rfi` and `rl` fail until a loader is pushed into RAM
+  with `rkdeveloptool db <loader>` (RAM only, writes nothing).
+- With a broken IDBlock the BootROM falls back to MaskROM by itself; with a
+  broken U-Boot but intact IDBlock, getting there needs a short or the ADC
+  download key (location unknown).
+- **Never use Rockchip's `_nand` usbplug on this robot.**
+  rkbin's `RK3566MINIALL_NAND.ini` pairs the DDR blob with
+  `rk356x_usbplug_nand_v1.04.bin`, which contains Rockchip's legacy NAND FTL
+  (`FTL version: 6.0.24 20210107`, `no sys info %x`, `ftl_low_format`). That
+  FTL low-formats a NAND where it finds no FTL metadata, and this robot's
+  NAND is raw MTD/UBI with none, so loading it would likely wipe the chip,
+  vnvm and U-Boot included. [C strings, I behaviour]
+- The generic usbplug (`rk356x_usbplug_v1.17.bin` in rkbin, or the one in
+  Radxa's prebuilt `rk356x_spl_loader_ddr1056_v1.10.111.bin`, sha256
+  `d7cfd619870cebe5a69e365796709d5ba1fc0294a84ae63357a9d189074dc100`, usbplug
+  built Dec 9 2021) has no FTL format code: a raw SLC NAND driver
+  (`nandc_flash_init`, `support nand flash type: slc`), and writes only in
+  command handlers (`write_idblock`, `write vendor`, `prog gpt`). The Radxa
+  loader's header has `sign_flag = 0` (unsigned), so a successful `db` also
+  shows the BootROM doesn't enforce secure boot.
+- `rkdeveloptool pack` (v1.32) fails on current rkbin `.ini` files
+  (`parseLoader failed!`) and can't set the RK356x RC4-off flags anyway; use
+  a prebuilt loader or Rockchip's `boot_merger`.
 - [I] Unverified: whether `rkdeveloptool`/`upgrade_tool` can write raw
   parallel SLC NAND on RK356x with a stock Rockchip loader
   (`rk356x_spl_loader` NAND variant). No public confirmation found.
