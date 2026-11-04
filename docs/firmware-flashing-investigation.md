@@ -316,6 +316,16 @@ Read in MaskROM after `rkdeveloptool db` of Radxa's
   (`nanddump`, `/dev/ubiblock0_0`, tar of `/oem`). The brick-critical region
   is inside the 32 MiB, so U-Boot and IDB restores over USB are unaffected.
 
+### rootfs image (`/dev/ubiblock0_0`)
+
+squashfs 4.0, **xz**, 256 KiB blocks, default xz options (no
+`COMP_OPT` flag), flags `0xc0` (duplicate detection, exportable), 3421
+inodes, 1 id (everything root-owned), `bytes_used` 88,558,443, built
+2026-09-13 18:57:18 UTC. A rebuild with
+`mksquashfs <dir> out.sqfs -comp xz -b 262144 -all-root` should be
+equivalent; byte-identical output also depends on the mksquashfs version
+and file order. [C header, I rebuild]
+
 ### NAND health (2026-11-04)
 
 From `/sys/class/mtd/mtdN/*` and a full `nanddump` of every partition: [C]
@@ -341,6 +351,26 @@ From `/sys/class/mtd/mtdN/*` and a full `nanddump` of every partition: [C]
   `0x24600`. [C]
 - **No AVB footer** (`AVBf`) or `AVB0` vbmeta in either, and no vbmeta
   partition exists, so nothing verifies them. Matches `orange`. [C]
+
+### Recovery ramdisk (mtd4)
+
+Kernel is LZ4, ramdisk a gzip cpio (`rootfs.cpio`, built 2024-06-17,
+16.8 MiB unpacked). Busybox init: [C]
+
+- `inittab` respawns `-/bin/sh` on the console, and `S50usbdevice` with
+  `.usb_config` = `usb_adb_en` starts the adb gadget and `/usr/bin/adbd`.
+  So in recovery mode there should be an adb root shell over the micro-USB
+  port [I: not tested], independent of the main rootfs.
+- `S40_recovery` runs `/usr/bin/recovery &` (the stock Rockchip recovery,
+  see [Stock update chain](#stock-update-chain-c)); `S99_bootcontrol` runs
+  `updateEngine --misc=now`. Also present: `updateEngine`, `busybox`,
+  `getty`, a `telnet` client. No dropbear.
+- [I] With no command in the BCB, recovery finishes and reboots, so the
+  adb window is short unless a command keeps it busy. Getting there needs
+  the BCB (`boot-recovery` in misc, written from Linux) or U-Boot's
+  recovery key (`boot mode: recovery (key)`, the same ADC line as the
+  download key). With the main rootfs broken, that again means hardware
+  access.
 
 ### misc (mtd2) and license (mtd3)
 
