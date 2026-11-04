@@ -139,6 +139,7 @@ Addresses in these docs are for these exact builds:
 |---|---|
 | `/usr/navi/video_node` | `e2b7334b8f4fe00ce9b095b3ae01985b8ec231bf26486341527c375e4939ffb2` |
 | `/usr/navi/planner_node` | `8a3785620d62c74676b38f30b695da1eb616b61513a0a8f51f23458301c47669` |
+| `/usr/navi/data_node` | `18cdaf1f01b2d98d99579bda89bfe1e73ee97a0d9bb300570a68f255f355c58e` |
 | `/usr/navi/manager_node` | `049e9d56d2c0dee98209871deb74fa31006b3bcd730e8b8abaf2d072215b50da` |
 | `/usr/lib/libsample_plugin.so` | `5b3fbca5d8421e71cdf0ffe893587ce089f7970507eacf97abfa0276d66480f1` |
 

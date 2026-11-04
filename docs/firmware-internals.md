@@ -200,6 +200,14 @@ come first, the rest follow the firmware's proximity ranking. `planner_node`
 then cleans in the order it receives. Details and the planned patch are in
 [room-order-investigation.md](room-order-investigation.md).
 
+## Dock water tanks
+
+The dock reports only binary tank states over BLE (`sensor_status` bits:
+clean tank fitted, dirty tank fitted, dirty tank full), published on
+`mcu-publish-water-station-info`. An empty clean tank is only detected
+during a mop wash. Details are in
+[water-tank-investigation.md](water-tank-investigation.md).
+
 ## Method notes
 
 See [research-workflow.md](research-workflow.md) for the tools and techniques

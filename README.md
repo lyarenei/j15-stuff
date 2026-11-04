@@ -19,6 +19,7 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   | [modifying-firmware.md](docs/modifying-firmware.md) | boot chain, vendor debug mode, ways to change behaviour, risks |
   | [mop-lift-investigation.md](docs/mop-lift-investigation.md) | **open**: right mop pad sometimes doesn't lift |
   | [room-order-investigation.md](docs/room-order-investigation.md) | rooms aren't cleaned in the selected order: cause and planned patch |
+  | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, what Valetudo exposes, options for level warnings |
   | [research-workflow.md](docs/research-workflow.md) | how to dump, analyse and reproduce these findings |
 
 - **[tools/](tools/)**: helper scripts for analysis on your computer:
