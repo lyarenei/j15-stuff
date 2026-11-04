@@ -1,0 +1,216 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:17:59 +0100
+Subject: [PATCH 01/28] fix(midea): map J15 robot error codes from firmware
+ table
+
+Correct the message, subsystem and severity of 1-19, 1-20, 1-21, 1-22,
+1-23, 1-24, 1-81 and 1-83 to what manager_node's error tables say
+(docking failed, vibrating mop fault, LDS UART failure, main board <->
+motor controller UART failure, motor controller internal error,
+relocalization failed, bumper keeps triggering, cliff sensor stop).
+
+Add the codes that were reported as "Unknown error": 1-25..1-30, 1-86,
+1-95, 1-165 and 1-168..1-172.
+
+Based on static analysis of the firmware error tables; untested on the
+robot. The wording of the turnplate and obstacle-crossing wheel entries
+is derived from the internal names only. 1-43 is left alone.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 24e5d6ce..61f63a83 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -641,41 +641,77 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Robot stuck or trapped";
+                     break;
+-                case 19: // RECHARGE_FAIL
++                case 19: // MCUE_DOCK_FAIL
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.POWER;
+-                    parameters.message = "Charging station without power";
++                    parameters.message = "Docking failed";
++                    break;
++                case 20: // MCUE_VIBRATE_MOP
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
++                    parameters.message = "Vibrating mop fault";
++                    break;
++                case 21: // M_RADAR_UART_COM_ABNORMAL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.CATASTROPHIC;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.SENSORS;
++                    parameters.message = "LDS communication error";
+                     break;
+-                case 20: // VIBRATION_DRAG_ERR
++                case 22: // MCUE_ARM_UART_COM_ABNORMAL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.CATASTROPHIC;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.CORE;
++                    parameters.message = "Motor controller communication error";
++                    break;
++                case 23: // MCUE_INTERIOR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.CORE;
++                    parameters.message = "Motor controller internal error";
++                    break;
++                case 24: // MCUE_RELOCATION_FAIL
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+-                    parameters.message = "Robot stuck or trapped";
++                    parameters.message = "Relocalization failed";
+                     break;
+-                case 21: // STERILIZATION_MODULE_ERR
+-                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+-                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                case 25: // BATTERY_LOW_NEED_DOCK
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.INFO;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.POWER;
++                    parameters.message = "Low battery, needs to return to the dock";
++                    break;
++                case 26: // DUST_FULLED
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.INFO;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
+-                    parameters.message = "Sterilization module fault";
++                    parameters.message = "Dustbin full";
+                     break;
+-                case 22: // ROBOT_WATER_BOX_UNINSTALL_ERROR
++                case 27: // WATER_BOX_EMPTY
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
+-                    parameters.message = "Water tank missing";
++                    parameters.message = "Water tank empty";
+                     break;
+-                case 23: // WIPE_CHIP_ERROR
++                case 28: // TURN_PLATE
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
+-                    parameters.message = "Wipe chip error";
++                    parameters.message = "Turnplate error";
+                     break;
+-                case 24: // RADAR_HIGH_TEMPERATURE
++                case 29: // WATERBIN_ABSENT
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
++                    parameters.message = "Water tank missing";
++                    break;
++                case 30: // TURN_PLATE_CHIP
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+-                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.SENSORS;
+-                    parameters.message = "LDS temperature out of operating range";
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
++                    parameters.message = "Turnplate chip error";
+                     break;
+                 case 32: // HAIR_CUT_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+@@ -731,11 +767,11 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Cannot reach target";
+                     break;
+-                case 81: // PHS_FIND_BARRIER
++                case 81: // PE_BUMPER_TRIGGER
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+-                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+-                    parameters.message = "Robot trapped by virtual restrictions";
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.SENSORS;
++                    parameters.message = "Bumper repeatedly triggered";
+                     break;
+                 case 82: // FIND_BARRIER
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+@@ -743,11 +779,11 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Robot trapped by virtual restrictions";
+                     break;
+-                case 83: // WHEELS_DANGLING
++                case 83: // PE_CLIFF_TRIGGER
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+-                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+-                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.CORE;
+-                    parameters.message = "Wheel lost floor contact";
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.SENSORS;
++                    parameters.message = "Stopped by cliff sensor";
+                     break;
+                 case 84: // ROBOT_OUT_STATION_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+@@ -761,6 +797,12 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Robot stuck or trapped";
+                     break;
++                case 86: // PE_MCU_FAULT
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.CORE;
++                    parameters.message = "Motor controller fault";
++                    break;
+                 case 87: // ROBOT_TIMEOUT
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+@@ -809,6 +851,12 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Navigation map error";
+                     break;
++                case 95: // PE_ROOM_LAYER_ERROR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
++                    parameters.message = "Room map error";
++                    break;
+                 case 96: // DEPART_FROM_NARROW_AREA_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+@@ -839,6 +887,42 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Localization error";
+                     break;
++                case 165: // IMU_I2C_ABNORMAL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.SENSORS;
++                    parameters.message = "IMU communication error";
++                    break;
++                case 168: // OBS_WHEEL_BACK
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.MOTORS;
++                    parameters.message = "Obstacle-crossing wheel retraction error";
++                    break;
++                case 169: // OBS_WHEEL_OUT_OVERLOAD
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.MOTORS;
++                    parameters.message = "Obstacle-crossing wheel extension overloaded";
++                    break;
++                case 170: // OBS_WHEEL_BACK_OVERLOAD
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.MOTORS;
++                    parameters.message = "Obstacle-crossing wheel retraction overloaded";
++                    break;
++                case 171: // BUMPER_SIDE_BRUSH_RIGHT
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.MOTORS;
++                    parameters.message = "Right side brush bumper triggered";
++                    break;
++                case 172: // CONTRACT_SIDE_BRUSH_RIGHT
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.MOTORS;
++                    parameters.message = "Right side brush retraction error";
++                    break;
+             }
+         } else if (errorType === 2) { // Restart errors
+             switch (errorDesc) {

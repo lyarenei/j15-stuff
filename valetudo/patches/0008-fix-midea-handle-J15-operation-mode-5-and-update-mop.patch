@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:20:57 +0100
+Subject: [PATCH 08/28] fix(midea): handle J15 operation mode 5 and update
+ mopMode
+
+The firmware accepts operation mode 5 (AiClean) as well as 0-3. When the
+app selected it the driver logged an unknown mopMode and showed no mode.
+Read 5 as vacuum and mop, which is what the firmware coerces it to. It
+is not offered as a preset.
+
+Mode 6 is the firmware's customized clean (per-room settings) and is
+deliberately left unknown.
+
+Also fix the optimistic update after setting a mode in
+MideaOperationModeControlCapabilityV2, which wrote the new value to
+station_work_status (the dock status) instead of mopMode.
+
+Based on static analysis of SetSweepMode; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index e527bd77..98c10cb2 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -297,8 +297,9 @@ class MideaValetudoRobot extends ValetudoRobot {
+         }
+ 
+         if (data.mopMode !== undefined) { // Mop mode 0 = vacuum & mop. Needs explicit check for !== undefined
++            const operationModeValue = MideaValetudoRobot.OPERATION_MODE_READ_ALIASES[data.mopMode] ?? data.mopMode;
+             let matchingOperationMode = Object.keys(MideaValetudoRobot.OPERATION_MODES).find(key => {
+-                return MideaValetudoRobot.OPERATION_MODES[key] === data.mopMode;
++                return MideaValetudoRobot.OPERATION_MODES[key] === operationModeValue;
+             });
+ 
+             if (matchingOperationMode) {
+@@ -1385,6 +1386,11 @@ MideaValetudoRobot.OPERATION_MODES = Object.freeze({
+     [stateAttrs.PresetSelectionStateAttribute.MODE.VACUUM_THEN_MOP]: 3,
+ });
+ 
++// Modes the app can set that the firmware accepts, but which are not offered as presets
++MideaValetudoRobot.OPERATION_MODE_READ_ALIASES = Object.freeze({
++    5: 0, // AiClean, which the firmware turns into vacuum and mop
++});
++
+ MideaValetudoRobot.WATER_GRADES = Object.freeze({
+     [stateAttrs.PresetSelectionStateAttribute.INTENSITY.LOW]: 1,
+     [stateAttrs.PresetSelectionStateAttribute.INTENSITY.MEDIUM]: 2,
+diff --git a/backend/lib/robots/midea/capabilities/MideaOperationModeControlCapabilityV2.js b/backend/lib/robots/midea/capabilities/MideaOperationModeControlCapabilityV2.js
+index 5a11c64f..a178e87d 100644
+--- a/backend/lib/robots/midea/capabilities/MideaOperationModeControlCapabilityV2.js
++++ b/backend/lib/robots/midea/capabilities/MideaOperationModeControlCapabilityV2.js
+@@ -32,7 +32,7 @@ class MideaOperationModeControlCapabilityV2 extends OperationModeControlCapabili
+             if (response?.payload?.[3] === 0x00) {
+                 this.robot.parseAndUpdateState(
+                     new MSmartStatusDTO({
+-                        station_work_status: matchedPreset.value
++                        mopMode: matchedPreset.value
+                     })
+                 );
+             } else {

@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:24 +0100
+Subject: [PATCH 22/28] fix(midea): log unknown floor materials at debug level
+
+The firmware accepts floor materials 0-4, but only 0, 2 and 3 have known
+names. The segment rendering already falls back to generic for the other
+values; the room info parser however logged a warning every time it saw
+one. Log it at debug level instead.
+
+Materials 1 and 4 remain unnamed; their meaning is unknown.
+
+diff --git a/backend/lib/robots/midea/MideaMapParser.js b/backend/lib/robots/midea/MideaMapParser.js
+index 460a5772..bcab8484 100644
+--- a/backend/lib/robots/midea/MideaMapParser.js
++++ b/backend/lib/robots/midea/MideaMapParser.js
+@@ -880,7 +880,7 @@ class MideaMapParser {
+ 
+             const mappedMaterial = FLOOR_MATERIAL_MAPPING[material];
+             if (!mappedMaterial) {
+-                Logger.warn(`Encountered unknown material '${material}' for segment '${roomId}'`);
++                Logger.debug(`Encountered unknown material '${material}' for segment '${roomId}', treating as generic`);
+             }
+ 
+             offset += 10;

@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:03 +0100
+Subject: [PATCH 04/28] fix(midea): only read J15 dock status byte while on the
+ station
+
+Status byte 36 is multiplexed by the firmware: it carries the dock
+work state only while the robot is OnStation (work status 18). During
+relocation it holds the relocation reason and while asleep the sleep
+reason (49-53), which were mapped to dock PAUSE/IDLE. Report dock IDLE
+whenever the robot is not on the station.
+
+Also fix the WSStatus names in the DOCK_STATUS_MAP comments (5 is
+MopHotDry, 8 ERP, 9 SelfClean, 10 CollectDust). The E20 path already
+filters this field out and is unaffected.
+
+Based on static analysis of the status builder; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 1c23a141..e527bd77 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -340,8 +340,15 @@ class MideaValetudoRobot extends ValetudoRobot {
+         }
+ 
+         if (data.station_work_status !== undefined) {
++            let dockStatus = stateAttrs.DockStatusStateAttribute.VALUE.IDLE;
++
++            // Outside of OnStation, the firmware reuses this byte for relocation and sleep reasons
++            if (this.ephemeralState.work_status === MideaValetudoRobot.WORK_STATUS_ON_STATION) {
++                dockStatus = MideaValetudoRobot.DOCK_STATUS_MAP[data.station_work_status] ?? stateAttrs.DockStatusStateAttribute.VALUE.ERROR;
++            }
++
+             this.state.upsertFirstMatchingAttribute(new entities.state.attributes.DockStatusStateAttribute({
+-                value: MideaValetudoRobot.DOCK_STATUS_MAP[data.station_work_status] ?? stateAttrs.DockStatusStateAttribute.VALUE.ERROR
++                value: dockStatus
+             }));
+         }
+ 
+@@ -1392,6 +1399,8 @@ MideaValetudoRobot.HIGH_RESOLUTION_WATER_GRADES = Object.freeze({
+     [stateAttrs.PresetSelectionStateAttribute.INTENSITY.MAX]: 130,
+ });
+ 
++MideaValetudoRobot.WORK_STATUS_ON_STATION = 18;
++
+ MideaValetudoRobot.STATUS_MAP = Object.freeze({
+     1: {
+         value: stateAttrs.StatusStateAttribute.VALUE.RETURNING
+@@ -1475,13 +1484,13 @@ MideaValetudoRobot.DOCK_STATUS_MAP = Object.freeze({
+     1: stateAttrs.DockStatusStateAttribute.VALUE.IDLE,       // "charging_on_dock"
+     2: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,   // "water_injection"
+     3: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,   // "cleaning_cloth"
+-    4: stateAttrs.DockStatusStateAttribute.VALUE.DRYING,     // "rag_drying"
+-    5: stateAttrs.DockStatusStateAttribute.VALUE.DRYING,     // "rag_air_drying"
++    4: stateAttrs.DockStatusStateAttribute.VALUE.DRYING,     // "mop_dry"
++    5: stateAttrs.DockStatusStateAttribute.VALUE.DRYING,     // "mop_hot_dry"
+     6: stateAttrs.DockStatusStateAttribute.VALUE.ERROR,      // "station_error"
+     7: stateAttrs.DockStatusStateAttribute.VALUE.IDLE,       // "charge_finish"
+-    8: stateAttrs.DockStatusStateAttribute.VALUE.IDLE,       // "sleep_in_station"
+-    9: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,   // "auto_clean"
+-    10: stateAttrs.DockStatusStateAttribute.VALUE.EMPTYING,  // "dusting"
++    8: stateAttrs.DockStatusStateAttribute.VALUE.IDLE,       // "erp" (low power)
++    9: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,   // "self_clean"
++    10: stateAttrs.DockStatusStateAttribute.VALUE.EMPTYING,  // "collect_dust"
+     11: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,  // "hair_cutting"
+     12: stateAttrs.DockStatusStateAttribute.VALUE.IDLE,      // "wait_for_charging"
+     13: stateAttrs.DockStatusStateAttribute.VALUE.CLEANING,  // "drain_water"

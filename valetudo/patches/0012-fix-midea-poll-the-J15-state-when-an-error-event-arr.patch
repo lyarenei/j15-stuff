@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:23:06 +0100
+Subject: [PATCH 12/28] fix(midea): poll the J15 state when an error event
+ arrives
+
+The robot pushes event 0x04 0xA3 on every fault change, but a status
+push does not necessarily follow, so errors only showed up at the next
+poll. Schedule a single state poll one second after such an event;
+further events inside that window are coalesced, so there is no loop.
+
+Based on static analysis of RobotFaultCallback; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index e6b917c2..244f0ae0 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -57,6 +57,7 @@ class MideaValetudoRobot extends ValetudoRobot {
+         this.mapParser = new MideaMapParser({mapHacksProvider: this.mapHacksProvider});
+         this.mapUpdateDebounceTimeout = null;
+         this.activeMapUpdateCount = 0;
++        this.statusPollTimeout = null;
+ 
+         this.dummycloud = new MSmartDummycloud({
+             dummyCloudTLSManager: this.dummyCloudTLSManager,
+@@ -127,6 +128,11 @@ class MideaValetudoRobot extends ValetudoRobot {
+     async shutdown() {
+         await super.shutdown();
+ 
++        if (this.statusPollTimeout) {
++            clearTimeout(this.statusPollTimeout);
++            this.statusPollTimeout = null;
++        }
++
+         if (this.mapUpdateDebounceTimeout) {
+             clearTimeout(this.mapUpdateDebounceTimeout);
+             this.mapUpdateDebounceTimeout = null;
+@@ -175,8 +181,8 @@ class MideaValetudoRobot extends ValetudoRobot {
+ 
+             return true;
+         } else if (data instanceof dtos.MSmartErrorDTO) {
+-            Logger.debug("Received ErrorDTO. Should we do anything with it?", data);
+-            // FIXME: is it required to use it at all? Should we poll state when we see this?
++            Logger.debug("Received ErrorDTO", data);
++            this.scheduleStatusPoll();
+ 
+             return true;
+         } else if (data instanceof dtos.MSmartDockStatusDTO) {
+@@ -191,6 +197,25 @@ class MideaValetudoRobot extends ValetudoRobot {
+         return false;
+     }
+ 
++    /**
++     * The robot pushes an error event on every fault change, but not necessarily a status with it
++     *
++     * @private
++     */
++    scheduleStatusPoll() {
++        if (this.statusPollTimeout) {
++            return;
++        }
++
++        this.statusPollTimeout = setTimeout(() => {
++            this.statusPollTimeout = null;
++
++            this.pollState().catch(e => {
++                Logger.warn("Error while polling the state after an error event", e);
++            });
++        }, 1000);
++    }
++
+     /**
+      * @param {import("../../msmart/dtos/MSmartStatusDTO")} data
+      */

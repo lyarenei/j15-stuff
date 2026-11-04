@@ -1,0 +1,101 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:52:29 +0100
+Subject: [PATCH 26/28] feat(midea): add a SETTING 0x2B v2 room info builder
+
+SETTING 0x2B writes the per-room settings, including the clean sequence
+that decides the order of segment cleanups. The existing payload builder
+hard-codes version 1, which leaves the fluid type and vacuum/mop mode
+uninitialized in the firmware, so add a builder for the v2 layout. Its
+entry layout differs from the ACTION 0x28 reply.
+
+Based on static analysis; untested on the robot.
+
+diff --git a/backend/lib/msmart/MSmartPacket.js b/backend/lib/msmart/MSmartPacket.js
+index afd36396..4b4b0510 100644
+--- a/backend/lib/msmart/MSmartPacket.js
++++ b/backend/lib/msmart/MSmartPacket.js
+@@ -112,6 +112,41 @@ class MSmartPacket {
+         ]);
+     }
+ 
++    /**
++     * Builds a SETTING 0x2B payload in the v2 layout.
++     * The v1 layout leaves the fluid type and vacuum/mop mode uninitialized in the firmware, so it must not be used.
++     * Every field of a listed room is overwritten, so callers need to pass the complete current state of the room.
++     *
++     * @param {Array<import("./dtos/MSmartRoomInfoDTO").MSmartRoomInfo>} rooms
++     * @return {Buffer}
++     */
++    static buildRoomInfoPayloadV2(rooms) {
++        const entrySize = 10;
++        const payload = Buffer.alloc(6 + rooms.length * entrySize);
++
++        payload[0] = 0xaa;
++        payload[1] = 0x02;
++        payload[2] = 0x2b;
++        payload[4] = rooms.length;
++        payload[5] = entrySize;
++
++        rooms.forEach((room, i) => {
++            const offset = 6 + i * entrySize;
++
++            payload[offset] = room.id;
++            payload[offset + 1] = room.cleanCount;
++            payload[offset + 2] = room.vacuumMopMode ?? 0;
++            // offset + 3 unused
++            payload[offset + 4] = room.fanSpeed;
++            payload[offset + 5] = room.waterLevel;
++            payload[offset + 6] = room.cleanSeq;
++            payload[offset + 7] = room.fluidType ?? 0;
++            payload[offset + 8] = room.routeType ?? 1;
++        });
++
++        return payload;
++    }
++
+     /**
+      *
+      * @param {number} commandId
+diff --git a/backend/test/lib/msmart/MSmartPacket_test.js b/backend/test/lib/msmart/MSmartPacket_test.js
+index ac1c0dc9..a0c4b166 100644
+--- a/backend/test/lib/msmart/MSmartPacket_test.js
++++ b/backend/test/lib/msmart/MSmartPacket_test.js
+@@ -109,4 +109,37 @@ describe("MSmartPacket", () => {
+             assert.deepStrictEqual(parsedPacket, originalPacket);
+         });
+     });
++
++    describe("buildRoomInfoPayloadV2", () => {
++        it("builds the v2 SET layout, not the layout of the GET reply", () => {
++            const payload = MSmartPacket.buildRoomInfoPayloadV2([
++                {id: 3, cleanCount: 2, fanSpeed: 4, waterLevel: 0x69, cleanSeq: 1, fluidType: 1, vacuumMopMode: 2, routeType: 3},
++                {id: 9, cleanCount: 1, fanSpeed: 1, waterLevel: 0x64, cleanSeq: 0, fluidType: 0, vacuumMopMode: 0, routeType: 1}
++            ]);
++
++            assert.strictEqual(
++                payload.toString("hex"),
++                "aa022b0002" + "0a" +
++                "03" + "02" + "02" + "00" + "04" + "69" + "01" + "01" + "03" + "00" +
++                "09" + "01" + "00" + "00" + "01" + "64" + "00" + "00" + "01" + "00"
++            );
++        });
++
++        it("builds a payload without rooms", () => {
++            assert.strictEqual(MSmartPacket.buildRoomInfoPayloadV2([]).toString("hex"), "aa022b00000a");
++        });
++
++        it("produces a valid packet", () => {
++            const packet = new MSmartPacket({
++                messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
++                payload: MSmartPacket.buildRoomInfoPayloadV2([
++                    {id: 1, cleanCount: 1, fanSpeed: 2, waterLevel: 100, cleanSeq: 4, fluidType: 0, vacuumMopMode: 0, routeType: 1}
++                ])
++            });
++
++            const parsed = MSmartPacket.FROM_BYTES(packet.toBytes());
++
++            assert.deepStrictEqual(parsed.payload, packet.payload);
++        });
++    });
+ });

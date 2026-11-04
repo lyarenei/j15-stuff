@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:20:45 +0100
+Subject: [PATCH 07/28] fix(midea): stop overwriting J15 water levels between
+ presets
+
+When the reported water level was above 100 but not one of the five
+presets, the driver re-sent the nearest preset, so every finer level
+set in the app was overwritten on the next poll. Level 100 was never
+normalized at all and showed as unknown.
+
+The firmware accepts and reports 100..130 plus the legacy 0..3 (which
+it encodes as 100/105/120/130). Report any such value as the nearest
+preset without sending a command. Presets for setting are unchanged.
+
+Based on static analysis of the water speed encoder tables; untested on
+the robot.
+
+diff --git a/backend/lib/robots/midea/MideaModernValetudoRobot.js b/backend/lib/robots/midea/MideaModernValetudoRobot.js
+index 921cfe1c..b69fe0ca 100644
+--- a/backend/lib/robots/midea/MideaModernValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaModernValetudoRobot.js
+@@ -2,7 +2,6 @@ const BEightParser = require("../../msmart/BEightParser");
+ const capabilities = require("./capabilities");
+ const dtos = require("../../msmart/dtos");
+ const entities = require("../../entities");
+-const Logger = require("../../Logger");
+ const MideaValetudoRobot = require("./MideaValetudoRobot");
+ const MSmartConst = require("../../msmart/MSmartConst");
+ const MSmartPacket = require("../../msmart/MSmartPacket");
+@@ -98,34 +97,29 @@ class MideaModernValetudoRobot extends MideaValetudoRobot {
+     }
+ 
+     parseAndUpdateState(data) {
++        const presetValues = Object.values(this.waterGrades);
++
+         if (
+-            data.water_level > 100 && // undefined also happens to be not > 100
+-            !Object.values(this.waterGrades).includes(data.water_level)
++            data.water_level !== undefined &&
++            !presetValues.includes(data.water_level) &&
++            (data.water_level <= 3 || (data.water_level >= 100 && data.water_level <= 130))
+         ) {
+-            Logger.warn(`Received unknown water grade ${data.water_level}. Normalizing.`);
+-
+-            this.sendCommand(
+-                new MSmartPacket({
+-                    messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                    payload: MSmartPacket.buildPayload(
+-                        MSmartConst.SETTING.SET_WATER_GRADE,
+-                        Buffer.from([
+-                            Object.values(this.waterGrades).sort((a, b) => {
+-                                return Math.abs(a - data.water_level) - Math.abs(b - data.water_level);
+-                            })[0]
+-                        ])
+-                    )
+-                }).toHexString()
+-            ).catch(e => {
+-                Logger.warn("Error while normalizing water grade", e);
+-            });
++            let waterLevel = data.water_level;
++
++            if (waterLevel <= 3 && Math.max(...presetValues) > 100) {
++                waterLevel = MideaModernValetudoRobot.LEGACY_WATER_GRADE_TO_HIGH_RES[waterLevel];
++            }
++
++            const nearestPreset = presetValues.sort((a, b) => {
++                return Math.abs(a - waterLevel) - Math.abs(b - waterLevel);
++            })[0];
+ 
+             return super.parseAndUpdateState(
+                 new dtos.MSmartStatusDTO(
+                     Object.assign(
+                         {},
+                         data,
+-                        {water_level: undefined}
++                        {water_level: nearestPreset}
+                     )
+                 )
+             );
+@@ -189,4 +183,11 @@ class MideaModernValetudoRobot extends MideaValetudoRobot {
+     }
+ }
+ 
++MideaModernValetudoRobot.LEGACY_WATER_GRADE_TO_HIGH_RES = Object.freeze({
++    0: 100,
++    1: 105,
++    2: 120,
++    3: 130,
++});
++
+ module.exports = MideaModernValetudoRobot;

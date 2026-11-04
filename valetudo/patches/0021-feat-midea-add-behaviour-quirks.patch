@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:07 +0100
+Subject: [PATCH 21/28] feat(midea): add behaviour quirks
+
+Expose more firmware toggles as quirks on the J15 Pro Ultra: continuous
+cleaning / smart breakpoint clean (0x9C 0x00), child lock follows DND
+(0x02), narrow zone recharge (0x1d) and cross bridge (0x0a). Readback
+uses the already parsed status bits.
+
+Based on static analysis; untested. The toggle ids and readback bits are
+confirmed, the descriptions are inferred from the firmware log strings
+and function names and may be imprecise.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index f0f92aca..a64c937e 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -92,6 +92,10 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.BIG_OBJECT_RECOGNITION),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.FALL_DOWN_DETECTION),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.STUCK_SPOT_MARKING),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CONTINUOUS_CLEANING),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CHILD_LOCK_FOLLOWS_DND),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.NARROW_ZONE_RECHARGE),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CROSS_BRIDGE),
+             ]
+         }));
+ 
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 7f41b18e..506df6ab 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -849,6 +849,34 @@ class MideaQuirkFactory {
+                     toggleId: 0x24, // stuck mark
+                     statusField: "stuck_mark_switch"
+                 });
++            case MideaQuirkFactory.KNOWN_QUIRKS.CONTINUOUS_CLEANING:
++                return this.getToggleQuirk(id, {
++                    title: "Continuous Cleaning",
++                    description: "Resume the cleanup after recharging.",
++                    toggleId: 0x00, // smart breakpoint clean
++                    statusField: "continuous_clean_mode"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.CHILD_LOCK_FOLLOWS_DND:
++                return this.getToggleQuirk(id, {
++                    title: "Child Lock Follows DND",
++                    description: "Automatically enable the child lock while Do Not Disturb is active.",
++                    toggleId: 0x02, // child lock follow DND
++                    statusField: "child_lock_follows_dnd"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.NARROW_ZONE_RECHARGE:
++                return this.getToggleQuirk(id, {
++                    title: "Narrow Zone Recharge",
++                    description: "Allow the robot to return to the dock from narrow zones.",
++                    toggleId: 0x1D, // narrow zone recharge
++                    statusField: "narrow_zone_recharge_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.CROSS_BRIDGE:
++                return this.getToggleQuirk(id, {
++                    title: "Cross Bridge",
++                    description: "Allow the robot to cross bridge-like obstacles.",
++                    toggleId: 0x0A, // cross bridge
++                    statusField: "cross_bridge_switch"
++                });
+             default:
+                 throw new Error(`There's no quirk with id ${id}`);
+         }
+@@ -934,6 +962,10 @@ MideaQuirkFactory.KNOWN_QUIRKS = {
+     BIG_OBJECT_RECOGNITION: "c16749d8-21ab-469b-bfe2-4108a75e31fb",
+     FALL_DOWN_DETECTION: "ec4bc275-fa98-4e15-81f9-821aafeb351d",
+     STUCK_SPOT_MARKING: "3088e7d0-5ef7-4f1d-8600-a80ee4bb358d",
++    CONTINUOUS_CLEANING: "8e1b37a1-f118-4020-85d1-766f7b92c59e",
++    CHILD_LOCK_FOLLOWS_DND: "f04c6ece-e5c1-455a-85c7-c9dd8b6472ac",
++    NARROW_ZONE_RECHARGE: "97b2bce7-a7fc-4d0e-8943-4ec18af84e00",
++    CROSS_BRIDGE: "ff7b0fe2-1eda-4f07-b520-2853e0f02152",
+ };
+ 
+ module.exports = MideaQuirkFactory;

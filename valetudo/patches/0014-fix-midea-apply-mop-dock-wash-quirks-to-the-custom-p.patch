@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:17:50 +0100
+Subject: [PATCH 14/28] fix(midea): apply mop dock wash quirks to the custom
+ pair too
+
+The firmware uses the custom backwash area and wash mode instead of the
+general ones whenever the mode byte of the mop dock settings is not 0.
+The wash frequency and intensity quirks only changed the general pair,
+so they had no effect after the vendor app selected a custom mode.
+
+Write the new value into both pairs and leave the mode byte unchanged.
+The getters still read the general pair.
+
+Based on static analysis; untested. The code path is confirmed, that
+mode != 0 means custom is likely.
+
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 229c098e..103dd233 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -550,7 +550,7 @@ class MideaQuirkFactory {
+                                     val,
+                                     parsedResponse.general_cleaning_mode,
+ 
+-                                    parsedResponse.custom_backwash_area,
++                                    val,
+                                     parsedResponse.custom_cleaning_mode,
+                                 ])
+                             )
+@@ -626,7 +626,7 @@ class MideaQuirkFactory {
+                                     val,
+ 
+                                     parsedResponse.custom_backwash_area,
+-                                    parsedResponse.custom_cleaning_mode,
++                                    val,
+                                 ])
+                             )
+                         }).toHexString());

@@ -1,0 +1,531 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:22:26 +0100
+Subject: [PATCH 10/28] fix(midea): check the reply of 0x9C toggle writes
+
+The firmware answers SET_VARIOUS_TOGGLES with [aa 01 9c result id value],
+result 0 for OK and 1 for an unknown id, an out-of-range value or an
+unsupported case. Valetudo never looked at it, so a rejected toggle
+looked successful until the next poll.
+
+Add MSmartToggles.setToggle(robot, id, value) and assertToggleReply()
+and use setToggle in the toggle capabilities (key lock, camera light,
+obstacle images, AI obstacle avoidance, pet mode, mop extension,
+furniture legs, mop auto drying, carpet sensor v1 and the auto-empty
+interval v3 toggle). A non-zero result throws.
+
+MideaQuirkFactory, collision avoidant navigation and mop twist are not
+converted here.
+
+Based on static analysis of the 0x9C handler; untested on the robot.
+
+diff --git a/backend/lib/msmart/MSmartToggles.js b/backend/lib/msmart/MSmartToggles.js
+new file mode 100644
+index 00000000..6e967461
+--- /dev/null
++++ b/backend/lib/msmart/MSmartToggles.js
+@@ -0,0 +1,43 @@
++const MSmartConst = require("./MSmartConst");
++const MSmartPacket = require("./MSmartPacket");
++
++/**
++ * The reply to SET_VARIOUS_TOGGLES is [aa 01 9c result id value] with result 0 for OK
++ * and 1 for an unknown id, an out-of-range value or an unsupported case
++ *
++ * @param {import("./MSmartPacket")} response
++ * @param {number} toggleId
++ * @returns {void}
++ */
++function assertToggleReply(response, toggleId) {
++    const result = response?.payload?.[3];
++
++    if (result !== 0x00) {
++        throw new Error(`Setting toggle 0x${toggleId.toString(16)} failed. Robot replied with result ${result}`);
++    }
++}
++
++/**
++ * Sets a SET_VARIOUS_TOGGLES toggle and throws if the robot rejects it
++ *
++ * @param {{sendCommand: function(string, object=): Promise<import("./MSmartPacket")>}} robot
++ * @param {number} toggleId
++ * @param {number} value
++ * @returns {Promise<void>}
++ */
++async function setToggle(robot, toggleId, value) {
++    const response = await robot.sendCommand(new MSmartPacket({
++        messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
++        payload: MSmartPacket.buildPayload(
++            MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
++            Buffer.from([toggleId, value])
++        )
++    }).toHexString());
++
++    assertToggleReply(response, toggleId);
++}
++
++module.exports = {
++    assertToggleReply: assertToggleReply,
++    setToggle: setToggle
++};
+diff --git a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
+index a87d2a37..f3bce4cf 100644
+--- a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
++++ b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
+@@ -3,6 +3,7 @@ const BEightParser = require("../../../msmart/BEightParser");
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends AutoEmptyDockAutoEmptyIntervalControlCapability<import("../MideaValetudoRobot")>
+@@ -54,18 +55,7 @@ class MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3 extends AutoEmptyDo
+                 throw new Error("Invalid interval");
+         }
+ 
+-        await this.robot.sendCommand(
+-            new MSmartPacket({
+-                messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                payload: MSmartPacket.buildPayload(
+-                    MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                    Buffer.from([
+-                        0x33, // middle-goback-dust
+-                        newInterval === AutoEmptyDockAutoEmptyIntervalControlCapability.INTERVAL.FREQUENT ? 1 : 0
+-                    ])
+-                )
+-            }).toHexString()
+-        );
++        await setToggle(this.robot, 0x33, newInterval === AutoEmptyDockAutoEmptyIntervalControlCapability.INTERVAL.FREQUENT ? 1 : 0); // middle-goback-dust
+ 
+         await this.robot.sendCommand(
+             new MSmartPacket({
+diff --git a/backend/lib/robots/midea/capabilities/MideaCameraLightControlCapability.js b/backend/lib/robots/midea/capabilities/MideaCameraLightControlCapability.js
+index 89b0065c..98070e27 100644
+--- a/backend/lib/robots/midea/capabilities/MideaCameraLightControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaCameraLightControlCapability.js
+@@ -3,6 +3,7 @@ const CameraLightControlCapability = require("../../../core/capabilities/CameraL
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends CameraLightControlCapability<import("../MideaValetudoRobot")>
+@@ -34,36 +35,14 @@ class MideaCameraLightControlCapability extends CameraLightControlCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x0b, // LED
+-                    0x01 // true
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x0b, 1); // LED
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x0b, // LED
+-                    0x00 // false
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x0b, 0); // LED
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaCarpetSensorModeControlCapabilityV1.js b/backend/lib/robots/midea/capabilities/MideaCarpetSensorModeControlCapabilityV1.js
+index a7087374..6af1da91 100644
+--- a/backend/lib/robots/midea/capabilities/MideaCarpetSensorModeControlCapabilityV1.js
++++ b/backend/lib/robots/midea/capabilities/MideaCarpetSensorModeControlCapabilityV1.js
+@@ -3,6 +3,7 @@ const CarpetSensorModeControlCapability = require("../../../core/capabilities/Ca
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends CarpetSensorModeControlCapability<import("../MideaValetudoRobot")>
+@@ -48,18 +49,7 @@ class MideaCarpetSensorModeControlCapabilityV1 extends CarpetSensorModeControlCa
+                 throw new Error(`Received invalid mode ${newMode}`);
+         }
+ 
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x07, // switch carpet evade
+-                    val
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x07, val); // switch carpet evade
+     }
+ 
+     getProperties() {
+diff --git a/backend/lib/robots/midea/capabilities/MideaKeyLockCapabilityV2.js b/backend/lib/robots/midea/capabilities/MideaKeyLockCapabilityV2.js
+index 051beb79..8527ff2f 100644
+--- a/backend/lib/robots/midea/capabilities/MideaKeyLockCapabilityV2.js
++++ b/backend/lib/robots/midea/capabilities/MideaKeyLockCapabilityV2.js
+@@ -3,6 +3,7 @@ const KeyLockCapability = require("../../../core/capabilities/KeyLockCapability"
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends KeyLockCapability<import("../MideaValetudoRobot")>
+@@ -35,36 +36,14 @@ class MideaKeyLockCapabilityV2 extends KeyLockCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x01, // Key Lock
+-                    0x01 // true
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x01, 1); // Key Lock
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x01, // Key Lock
+-                    0x00 // false
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x01, 0); // Key Lock
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopDockMopAutoDryingControlCapability.js b/backend/lib/robots/midea/capabilities/MideaMopDockMopAutoDryingControlCapability.js
+index 2c65bfeb..d939357b 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopDockMopAutoDryingControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopDockMopAutoDryingControlCapability.js
+@@ -3,6 +3,7 @@ const MopDockMopAutoDryingControlCapability = require("../../../core/capabilitie
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends MopDockMopAutoDryingControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaMopDockMopAutoDryingControlCapability extends MopDockMopAutoDryingCon
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x14, // mop auto drying
+-                    0x01 // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x14, 1); // mop auto drying
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x14, // mop auto drying
+-                    0x00 // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x14, 0); // mop auto drying
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopExtensionControlCapability.js b/backend/lib/robots/midea/capabilities/MideaMopExtensionControlCapability.js
+index 3eb41580..a5d4b707 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopExtensionControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopExtensionControlCapability.js
+@@ -3,6 +3,7 @@ const MopExtensionControlCapability = require("../../../core/capabilities/MopExt
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends MopExtensionControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaMopExtensionControlCapability extends MopExtensionControlCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x26, // Mop extension
+-                    0x01 // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x26, 1); // Mop extension
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x26, // Mop extension
+-                    0x00 // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x26, 0); // Mop extension
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopExtensionFurnitureLegHandlingControlCapability.js b/backend/lib/robots/midea/capabilities/MideaMopExtensionFurnitureLegHandlingControlCapability.js
+index 30d8378f..3514e9a4 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopExtensionFurnitureLegHandlingControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopExtensionFurnitureLegHandlingControlCapability.js
+@@ -3,6 +3,7 @@ const MopExtensionFurnitureLegHandlingControlCapability = require("../../../core
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends MopExtensionFurnitureLegHandlingControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaMopExtensionFurnitureLegHandlingControlCapability extends MopExtensio
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2f, // furniture legs cleaning
+-                    0x01 // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2f, 1); // furniture legs cleaning
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2f, // furniture legs cleaning
+-                    0x00 // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2f, 0); // furniture legs cleaning
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaObstacleAvoidanceControlCapability.js b/backend/lib/robots/midea/capabilities/MideaObstacleAvoidanceControlCapability.js
+index 9d158e43..4661b109 100644
+--- a/backend/lib/robots/midea/capabilities/MideaObstacleAvoidanceControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaObstacleAvoidanceControlCapability.js
+@@ -3,6 +3,7 @@ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
+ const ObstacleAvoidanceControlCapability = require("../../../core/capabilities/ObstacleAvoidanceControlCapability");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends ObstacleAvoidanceControlCapability<import("../MideaValetudoRobot")>
+@@ -41,44 +42,17 @@ class MideaObstacleAvoidanceControlCapability extends ObstacleAvoidanceControlCa
+         }
+ 
+         if (status.ai_recognition_switch === false) {
+-            await this.robot.sendCommand(new MSmartPacket({
+-                messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                payload: MSmartPacket.buildPayload(
+-                    MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                    Buffer.from([
+-                        0x0f, // AI Recognition
+-                        0x01  // true
+-                    ])
+-                )
+-            }).toHexString());
++            await setToggle(this.robot, 0x0f, 1); // AI Recognition
+         }
+ 
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2c, // AI Obstacle Avoidance
+-                    0x01  // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2c, 1); // AI Obstacle Avoidance
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2c, // AI Obstacle Avoidance
+-                    0x00  // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2c, 0); // AI Obstacle Avoidance
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaObstacleImagesCapability.js b/backend/lib/robots/midea/capabilities/MideaObstacleImagesCapability.js
+index 7db39570..e5a6415b 100644
+--- a/backend/lib/robots/midea/capabilities/MideaObstacleImagesCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaObstacleImagesCapability.js
+@@ -5,6 +5,7 @@ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
+ const ObstacleImagesCapability = require("../../../core/capabilities/ObstacleImagesCapability");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ 
+ /**
+@@ -32,32 +33,14 @@ class MideaObstacleImagesCapability extends ObstacleImagesCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x35, // AI Images
+-                    0x01  // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x35, 1); // AI Images
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x35, // AI Images
+-                    0x00  // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x35, 0); // AI Images
+     }
+ 
+     /**
+diff --git a/backend/lib/robots/midea/capabilities/MideaPetObstacleAvoidanceControlCapability.js b/backend/lib/robots/midea/capabilities/MideaPetObstacleAvoidanceControlCapability.js
+index f0e3c9ce..b906f639 100644
+--- a/backend/lib/robots/midea/capabilities/MideaPetObstacleAvoidanceControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaPetObstacleAvoidanceControlCapability.js
+@@ -3,6 +3,7 @@ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
+ const PetObstacleAvoidanceControlCapability = require("../../../core/capabilities/PetObstacleAvoidanceControlCapability");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends PetObstacleAvoidanceControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaPetObstacleAvoidanceControlCapability extends PetObstacleAvoidanceCon
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x0e, // Pet Mode
+-                    0x01  // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x0e, 1); // Pet Mode
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x0e, // Pet mode
+-                    0x00  // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x0e, 0); // Pet mode
+     }
+ }
+ 

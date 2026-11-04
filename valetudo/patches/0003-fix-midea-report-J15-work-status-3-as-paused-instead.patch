@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:45 +0100
+Subject: [PATCH 03/28] fix(midea): report J15 work status 3 as paused instead
+ of docked
+
+The firmware sends work status 3 for GoingHomePause and as the fallback
+for internal states it has no IoT code for. Showing that as DOCKED hid
+a robot paused on its way home and made it non-resumable. Map it to
+PAUSED with the resumable flag. Docked detection is unaffected: the
+real on-station state is 18, which still maps to DOCKED.
+
+Based on static analysis of the status encoder tables; untested on the
+robot.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 5e143026..1c23a141 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -1399,8 +1399,9 @@ MideaValetudoRobot.STATUS_MAP = Object.freeze({
+     2: {
+         value: stateAttrs.StatusStateAttribute.VALUE.DOCKED
+     },
+-    3: {
+-        value: stateAttrs.StatusStateAttribute.VALUE.DOCKED
++    3: { // GoingHomePause, also what the firmware sends for states it can't encode
++        value: stateAttrs.StatusStateAttribute.VALUE.PAUSED,
++        flag: stateAttrs.StatusStateAttribute.FLAG.RESUMABLE
+     },
+     4: {
+         value: stateAttrs.StatusStateAttribute.VALUE.DOCKED

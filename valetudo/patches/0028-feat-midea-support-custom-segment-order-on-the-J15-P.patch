@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:53:36 +0100
+Subject: [PATCH 28/28] feat(midea): support custom segment order on the J15
+ Pro Ultra
+
+Use the room order helper when a segment cleanup is requested with a
+custom order. The robot only gets the helper on the J15 Pro Ultra, whose
+firmware answers the room info request with the v2 layout.
+
+Based on static analysis; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index 0fe2caae..e02a4c36 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -5,6 +5,7 @@ const LinuxWifiScanCapability = require("../common/linuxCapabilities/LinuxWifiSc
+ const Logger = require("../../Logger");
+ const MideaModernValetudoRobot = require("./MideaModernValetudoRobot");
+ const MideaQuirkFactory = require("./MideaQuirkFactory");
++const MideaRoomOrderHelper = require("./MideaRoomOrderHelper");
+ const MissingResourceValetudoEvent = require("../../valetudo_events/events/MissingResourceValetudoEvent");
+ const QuirksCapability = require("../../core/capabilities/QuirksCapability");
+ const {IMAGE_FILE_FORMAT} = require("../../utils/const");
+@@ -21,6 +22,8 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+             )
+         );
+ 
++        this.roomOrderHelper = new MideaRoomOrderHelper({robot: this});
++
+         const quirkFactory = new MideaQuirkFactory({
+             robot: this
+         });
+diff --git a/backend/lib/robots/midea/capabilities/MideaMapSegmentationCapabilityV2.js b/backend/lib/robots/midea/capabilities/MideaMapSegmentationCapabilityV2.js
+index bd6cc22f..ebcb4bdb 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMapSegmentationCapabilityV2.js
++++ b/backend/lib/robots/midea/capabilities/MideaMapSegmentationCapabilityV2.js
+@@ -67,7 +67,18 @@ class MideaMapSegmentationCapabilityV2 extends MapSegmentationCapability {
+             )
+         });
+ 
+-        await this.robot.sendCommand(packet.toHexString());
++        const roomOrderHelper = options?.customOrder === true ? this.robot.roomOrderHelper : undefined;
++        if (roomOrderHelper) {
++            await roomOrderHelper.prepareOrderedCleanup(segments.map(segment => parseInt(segment.id)));
++        }
++
++        try {
++            await this.robot.sendCommand(packet.toHexString());
++        } catch (e) {
++            await roomOrderHelper?.abortOrderedCleanup();
++
++            throw e;
++        }
+     }
+ 
+     /**
+@@ -79,7 +90,7 @@ class MideaMapSegmentationCapabilityV2 extends MapSegmentationCapability {
+                 min: 1,
+                 max: 3
+             },
+-            customOrderSupport: false
++            customOrderSupport: !!this.robot.roomOrderHelper
+         };
+     }
+ }

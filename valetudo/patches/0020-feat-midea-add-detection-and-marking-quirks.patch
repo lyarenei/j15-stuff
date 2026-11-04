@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:07 +0100
+Subject: [PATCH 20/28] feat(midea): add detection and marking quirks
+
+Expose more firmware toggles as quirks on the J15 Pro Ultra: AI carpet
+avoidance (0x9C 0x22), curtain detection (0x3b), big object recognition
+(0x32), fall-down detection (0x34) and stuck spot marking (0x24).
+Readback uses the already parsed status bits.
+
+Based on static analysis; untested. The toggle ids and readback bits are
+confirmed, the exact behaviour is inferred from the firmware log strings
+and function names. AI carpet avoidance (0x22) is separate from the
+camera carpet detection bit of the carpet settings quirk.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index 94eb953c..f0f92aca 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -87,6 +87,11 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.GAP_DEEP_CLEANING),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CRISS_CROSS),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.ZIGZAG_TO_END),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.AI_CARPET_AVOIDANCE),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CURTAIN_DETECTION),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.BIG_OBJECT_RECOGNITION),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.FALL_DOWN_DETECTION),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.STUCK_SPOT_MARKING),
+             ]
+         }));
+ 
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 20d45cba..7f41b18e 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -814,6 +814,41 @@ class MideaQuirkFactory {
+                     toggleId: 0x27, // zigzag to end
+                     statusField: "zigzag_to_end_switch"
+                 });
++            case MideaQuirkFactory.KNOWN_QUIRKS.AI_CARPET_AVOIDANCE:
++                return this.getToggleQuirk(id, {
++                    title: "AI Carpet Avoidance",
++                    description: "Use the camera to recognize carpets and avoid them.",
++                    toggleId: 0x22, // AICarpetAvoidance
++                    statusField: "ai_carpet_avoid_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.CURTAIN_DETECTION:
++                return this.getToggleQuirk(id, {
++                    title: "Curtain Detection",
++                    description: "Detect curtains using the AI camera and act accordingly.",
++                    toggleId: 0x3B, // curtain detect
++                    statusField: "curtain_recognition_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.BIG_OBJECT_RECOGNITION:
++                return this.getToggleQuirk(id, {
++                    title: "Big Object Recognition",
++                    description: "Recognize big objects such as furniture using the AI camera.",
++                    toggleId: 0x32, // big object AI recognize
++                    statusField: "furniture_identify_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.FALL_DOWN_DETECTION:
++                return this.getToggleQuirk(id, {
++                    title: "Fall-Down Detection",
++                    description: "Use the AI camera to recognize a person who has fallen down.",
++                    toggleId: 0x34, // fall down detect
++                    statusField: "fall_detection_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.STUCK_SPOT_MARKING:
++                return this.getToggleQuirk(id, {
++                    title: "Stuck Spot Marking",
++                    description: "Mark spots where the robot got stuck.",
++                    toggleId: 0x24, // stuck mark
++                    statusField: "stuck_mark_switch"
++                });
+             default:
+                 throw new Error(`There's no quirk with id ${id}`);
+         }
+@@ -894,6 +929,11 @@ MideaQuirkFactory.KNOWN_QUIRKS = {
+     GAP_DEEP_CLEANING: "78b901cb-c0af-428a-8492-6b4b6293a800",
+     CRISS_CROSS: "99dc2682-061e-4192-817e-efb720623cd0",
+     ZIGZAG_TO_END: "3d8106b5-3413-4df6-a427-596cab23b52f",
++    AI_CARPET_AVOIDANCE: "753ca52d-052c-459d-bdf1-1543d8adf77b",
++    CURTAIN_DETECTION: "dd034944-497a-44b2-a095-d0ae23949080",
++    BIG_OBJECT_RECOGNITION: "c16749d8-21ab-469b-bfe2-4108a75e31fb",
++    FALL_DOWN_DETECTION: "ec4bc275-fa98-4e15-81f9-821aafeb351d",
++    STUCK_SPOT_MARKING: "3088e7d0-5ef7-4f1d-8600-a80ee4bb358d",
+ };
+ 
+ module.exports = MideaQuirkFactory;

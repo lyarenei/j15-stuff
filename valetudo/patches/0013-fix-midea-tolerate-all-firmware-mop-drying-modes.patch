@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:17:44 +0100
+Subject: [PATCH 13/28] fix(midea): tolerate all firmware mop drying modes
+
+The firmware accepts mop drying modes 0-7 (6h, 3h, 1h, 100min, 3h, 2h,
+3h, 6h; modes 0, 4 and 7 use drying method 2, which is probably
+unheated). The getter used to throw for modes 0-4, e.g. when the vendor
+app or the default had selected one of them.
+
+Map the modes to the closest existing preset: 0, 4 and 7 to cold, 1 and
+6 to 3h, 2, 3 and 5 to 2h. The setter and the offered presets are
+unchanged.
+
+Based on static analysis; untested. The table is confirmed, the meaning
+of method 2 is likely.
+
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopDockMopDryingTimeControlCapability.js b/backend/lib/robots/midea/capabilities/MideaMopDockMopDryingTimeControlCapability.js
+index 68bda489..4979f4f2 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopDockMopDryingTimeControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopDockMopDryingTimeControlCapability.js
+@@ -19,12 +19,17 @@ class MideaMopDockMopDryingTimeControlCapability extends MopDockMopDryingTimeCon
+ 
+         if (parsedResponse instanceof MSmartMopDockDryingSettingsDTO) {
+             switch (parsedResponse.mode) {
+-                case 5:
+-                    return MideaMopDockMopDryingTimeControlCapability.DURATION.TWO_HOURS;
+-                case 6:
+-                    return MideaMopDockMopDryingTimeControlCapability.DURATION.THREE_HOURS;
++                case 0:
++                case 4:
+                 case 7:
+                     return MideaMopDockMopDryingTimeControlCapability.DURATION.COLD;
++                case 1:
++                case 6:
++                    return MideaMopDockMopDryingTimeControlCapability.DURATION.THREE_HOURS;
++                case 2:
++                case 3:
++                case 5:
++                    return MideaMopDockMopDryingTimeControlCapability.DURATION.TWO_HOURS;
+                 default:
+                     throw new Error(`Received invalid value ${parsedResponse.mode}`);
+             }

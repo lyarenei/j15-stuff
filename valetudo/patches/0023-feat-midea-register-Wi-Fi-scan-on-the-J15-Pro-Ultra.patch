@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:24 +0100
+Subject: [PATCH 23/28] feat(midea): register Wi-Fi scan on the J15 Pro Ultra
+
+The J15 Pro Ultra has the same wlan0 interface and iw/iwlist tools as
+the J15 Max Ultra, which already registers the Wi-Fi scan capability.
+Register it the same way when running embedded.
+
+Based on the firmware file list; untested.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index a64c937e..0fe2caae 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -1,6 +1,7 @@
+ const capabilities = require("./capabilities");
+ const fs = require("node:fs");
+ const LinuxDuststreamingCapability = require("../common/linuxCapabilities/LinuxDuststreamingCapability");
++const LinuxWifiScanCapability = require("../common/linuxCapabilities/LinuxWifiScanCapability");
+ const Logger = require("../../Logger");
+ const MideaModernValetudoRobot = require("./MideaModernValetudoRobot");
+ const MideaQuirkFactory = require("./MideaQuirkFactory");
+@@ -99,6 +100,13 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+             ]
+         }));
+ 
++        if (this.config.get("embedded") === true) {
++            this.registerCapability(new LinuxWifiScanCapability({
++                robot: this,
++                networkInterface: "wlan0"
++            }));
++        }
++
+         if (this.config.get("embedded") === true) {
+             if (!fs.existsSync("/userdata/ai_models/cod-detect-large.bin")) {
+                 this.valetudoEventStore.raise(new MissingResourceValetudoEvent({

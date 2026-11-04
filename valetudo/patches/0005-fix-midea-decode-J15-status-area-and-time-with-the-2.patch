@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:37 +0100
+Subject: [PATCH 05/28] fix(midea): decode J15 status area and time with the
+ 255 split
+
+The firmware stores value % 255 in the low byte and value / 255 in the
+high nibble, but the parser combined them as (hi << 8) + lo, so every
+255 units were off by one (300 m2 read as 301).
+
+Use hi * 255 + lo, and take the exact big-endian u16 area from payload
+bytes 39-40 when present. Because other models use those bytes for
+something else (the J12 test fixture has 0x007c there), the exact value
+is only used if it is consistent with the low byte. Only the modern
+status payload is changed.
+
+Based on static analysis of the status builder; untested on the robot.
+
+diff --git a/backend/lib/msmart/BEightParser.js b/backend/lib/msmart/BEightParser.js
+index 9f308ffb..48cd10e4 100644
+--- a/backend/lib/msmart/BEightParser.js
++++ b/backend/lib/msmart/BEightParser.js
+@@ -325,7 +325,14 @@ class BEightParser {
+         data.fan_level = payload[8]; // 0 - 5
+ 
+         // work_area and work_time each have +4 additional bits in payload[22]. - INSANE
+-        data.work_area = ((payload[22] & 0b00001111) << 8) + payload[9];
++        // The firmware splits at 255, not 256: low byte = value % 255, high nibble = value / 255
++        data.work_area = (payload[22] & 0b00001111) * 255 + payload[9];
++
++        // The J15 firmware also sends the exact area as big-endian u16. Other models use these bytes for
++        // something else, so only trust it if it agrees with the split encoding above
++        if (payload.length >= 41 && payload.readUInt16BE(39) % 255 === payload[9]) {
++            data.work_area = payload.readUInt16BE(39);
++        }
+ 
+         data.water_level = payload[10]; // 0 - 3, OR high-res starting at >= 100
+         data.voice_level = payload[11]; // 0 - 100
+@@ -333,7 +340,7 @@ class BEightParser {
+         data.battery_percent = payload[13]; // 0 - 100
+ 
+         // work_area and work_time each have +4 additional bits in payload[22]. - INSANE - TODO validate. It was [23] before the LLM suggested something else
+-        data.work_time = (((payload[22] & 0b11110000) >> 4) << 8) + payload[14];
++        data.work_time = ((payload[22] & 0b11110000) >> 4) * 255 + payload[14];
+ 
+         data.uv_switch = !!(payload[15] & 0b00000001);
+         data.wifi_switch = !!(payload[15] & 0b00000010);

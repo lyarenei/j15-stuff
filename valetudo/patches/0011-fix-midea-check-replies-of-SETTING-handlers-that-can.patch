@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:22:51 +0100
+Subject: [PATCH 11/28] fix(midea): check replies of SETTING handlers that can
+ fail
+
+Check the result byte for the SETTING commands that have a real error
+path in the firmware and are used by the J15 capabilities:
+
+- 0xC7 auto-empty duration (not 1..3 -> error)
+- 0x56 dock intervals (unknown type -> error)
+- 0x5C mop drying start/stop (not 0/1 -> error)
+- 0x5E carpet behavior (invalid behavior -> error)
+
+Handlers that reply OK while ignoring the input (0x51, 0x31, 0xC9
+unlisted sub ids, 0x01 values 0/8, 0x63, 0x92, 0x59) are left alone, as
+a check would never fire. Mop drying time (0x9B) is left to the mop
+drying changes.
+
+Based on static analysis of the handlers; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyDurationControlCapabilityV2.js b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyDurationControlCapabilityV2.js
+index 8a035b2d..141a2676 100644
+--- a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyDurationControlCapabilityV2.js
++++ b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyDurationControlCapabilityV2.js
+@@ -50,13 +50,17 @@ class MideaAutoEmptyDockAutoEmptyDurationControlCapabilityV2 extends AutoEmptyDo
+                 throw new Error(`Received invalid duration ${newDuration}`);
+         }
+ 
+-        await this.robot.sendCommand(new MSmartPacket({
++        const response = await this.robot.sendCommand(new MSmartPacket({
+             messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+             payload: MSmartPacket.buildPayload(
+                 MSmartConst.SETTING.SET_AUTO_EMPTY_DURATION,
+                 Buffer.from([val])
+             )
+         }).toHexString());
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to set auto-empty duration.");
++        }
+     }
+ 
+     getProperties() {
+diff --git a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
+index f3bce4cf..3804127c 100644
+--- a/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
++++ b/backend/lib/robots/midea/capabilities/MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3.js
+@@ -57,7 +57,7 @@ class MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3 extends AutoEmptyDo
+ 
+         await setToggle(this.robot, 0x33, newInterval === AutoEmptyDockAutoEmptyIntervalControlCapability.INTERVAL.FREQUENT ? 1 : 0); // middle-goback-dust
+ 
+-        await this.robot.sendCommand(
++        const response = await this.robot.sendCommand(
+             new MSmartPacket({
+                 messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+                 payload: MSmartPacket.buildPayload(
+@@ -69,6 +69,10 @@ class MideaAutoEmptyDockAutoEmptyIntervalControlCapabilityV3 extends AutoEmptyDo
+                 )
+             }).toHexString()
+         );
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to set auto-empty interval.");
++        }
+     }
+ 
+     getProperties() {
+diff --git a/backend/lib/robots/midea/capabilities/MideaCarpetModeControlCapabilityV3.js b/backend/lib/robots/midea/capabilities/MideaCarpetModeControlCapabilityV3.js
+index 1ad3726b..4571fea9 100644
+--- a/backend/lib/robots/midea/capabilities/MideaCarpetModeControlCapabilityV3.js
++++ b/backend/lib/robots/midea/capabilities/MideaCarpetModeControlCapabilityV3.js
+@@ -56,7 +56,11 @@ class MideaCarpetModeControlCapabilityV3 extends CarpetModeControlCapability {
+             )
+         });
+ 
+-        await this.robot.sendCommand(packet.toHexString());
++        const response = await this.robot.sendCommand(packet.toHexString());
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to set carpet mode.");
++        }
+     }
+ 
+     /**
+@@ -77,7 +81,11 @@ class MideaCarpetModeControlCapabilityV3 extends CarpetModeControlCapability {
+             )
+         });
+ 
+-        await this.robot.sendCommand(packet.toHexString());
++        const response = await this.robot.sendCommand(packet.toHexString());
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to set carpet mode.");
++        }
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopDockDryManualTriggerCapability.js b/backend/lib/robots/midea/capabilities/MideaMopDockDryManualTriggerCapability.js
+index 230b07db..e54e8d42 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopDockDryManualTriggerCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopDockDryManualTriggerCapability.js
+@@ -20,7 +20,11 @@ class MideaMopDockDryManualTriggerCapability extends MopDockDryManualTriggerCapa
+             )
+         });
+ 
+-        await this.robot.sendCommand(packet.toHexString());
++        const response = await this.robot.sendCommand(packet.toHexString());
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to trigger mop drying.");
++        }
+     }
+ 
+     /**
+@@ -37,7 +41,11 @@ class MideaMopDockDryManualTriggerCapability extends MopDockDryManualTriggerCapa
+             )
+         });
+ 
+-        await this.robot.sendCommand(packet.toHexString());
++        const response = await this.robot.sendCommand(packet.toHexString());
++
++        if (response.payload[3] !== 0x00) {
++            throw new Error("Failed to trigger mop drying.");
++        }
+     }
+ }
+ 

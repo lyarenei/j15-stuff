@@ -1,0 +1,300 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:53:36 +0100
+Subject: [PATCH 27/28] feat(midea): add a helper for ordered room cleanups
+
+The firmware cleans the rooms of a segment cleanup sorted by their
+stored cleanSeq. Rooms with cleanSeq 0 follow in the firmware's own
+ranking, and rooms with a non-zero value also move to the front of
+whole-house cleanups.
+
+To clean in a requested order, read the rooms (ACTION 0x28), write
+cleanSeq 1..N for the selected rooms and 0 for other rooms that have a
+value (SETTING 0x2B v2, only changed rooms, all other fields written
+back unchanged), then start the cleanup as usual. The original values
+are stored in the robot's implementationSpecificConfig and written back
+once the status is docked or idle without the resumable flag after the
+robot was active, so that a mop wash or recharge in the middle of the
+cleanup doesn't end it. A pending record is also restored after a
+restart on the first idle status. Failures are logged and never block
+the cleanup.
+
+If /usr/navi/manager_node is a mount point, the patched manager_node
+keeps the request order as long as all selected rooms have cleanSeq 0,
+so no write is needed in that case.
+
+Based on static analysis; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaRoomOrderHelper.js b/backend/lib/robots/midea/MideaRoomOrderHelper.js
+new file mode 100644
+index 00000000..90357483
+--- /dev/null
++++ b/backend/lib/robots/midea/MideaRoomOrderHelper.js
+@@ -0,0 +1,267 @@
++const BEightParser = require("../../msmart/BEightParser");
++const dtos = require("../../msmart/dtos");
++const entities = require("../../entities");
++const fs = require("fs");
++const Logger = require("../../Logger");
++const MSmartConst = require("../../msmart/MSmartConst");
++const MSmartPacket = require("../../msmart/MSmartPacket");
++
++const stateAttrs = entities.state.attributes;
++
++/*
++    The firmware sorts the selected rooms of a segment cleanup by their stored cleanSeq, and uses its own ranking for
++    rooms with cleanSeq 0. To get a custom order, we write the cleanSeq of the rooms before starting the cleanup and put
++    the original values back once the robot is done, because rooms with a non-zero cleanSeq also move to the front of
++    whole-house cleanups.
++
++    With the patched manager_node, rooms with cleanSeq 0 are cleaned in the order of the request, so no writes are
++    necessary as long as all selected rooms have cleanSeq 0.
++ */
++class MideaRoomOrderHelper {
++    /**
++     * @param {object} options
++     * @param {import("./MideaValetudoRobot")} options.robot
++     */
++    constructor(options) {
++        this.robot = options.robot;
++
++        this.busy = false;
++        this.awaitingCleanupStart = false;
++        this.sawActiveState = false;
++        this.lastRestoreAttempt = 0;
++
++        this.robot.onStateAttributesUpdated(() => {
++            this.handleStateUpdate();
++        });
++    }
++
++    /**
++     * Makes the robot clean the segments in the given order once a segment cleanup is started.
++     * Failures are logged and don't prevent the cleanup.
++     *
++     * @param {Array<number>} segmentIds
++     * @returns {Promise<void>}
++     */
++    async prepareOrderedCleanup(segmentIds) {
++        if (segmentIds.length < 2) {
++            return;
++        }
++
++        this.busy = true;
++
++        try {
++            const rooms = await this.readRooms();
++
++            if (
++                this.isManagerNodePatched() &&
++                segmentIds.every(id => (rooms.find(r => r.id === id)?.cleanSeq ?? 0) === 0)
++            ) {
++                return;
++            }
++
++            const changes = [];
++            rooms.forEach(room => {
++                const index = segmentIds.indexOf(room.id);
++                const cleanSeq = index >= 0 ? index + 1 : 0;
++
++                if (room.cleanSeq !== cleanSeq) {
++                    changes.push(Object.assign({}, room, {cleanSeq: cleanSeq}));
++                }
++            });
++
++            if (changes.length === 0) {
++                return;
++            }
++
++            // Earlier originals win, because the rooms may still carry the values of a previous ordered cleanup
++            const record = this.getRestoreRecord() ?? {rooms: {}};
++            changes.forEach(change => {
++                if (record.rooms[change.id] === undefined) {
++                    record.rooms[change.id] = rooms.find(r => r.id === change.id).cleanSeq;
++                }
++            });
++
++            // Stored first so that a crash between the write and the end of the cleanup cannot lose the originals
++            this.setRestoreRecord(record);
++            this.awaitingCleanupStart = true;
++            this.sawActiveState = false;
++
++            try {
++                await this.writeRooms(changes);
++            } catch (e) {
++                Logger.warn("Failed to write the room order. The robot may clean the rooms in a different order", e);
++            }
++        } catch (e) {
++            Logger.warn("Failed to prepare the room order. The robot may clean the rooms in a different order", e);
++        } finally {
++            this.busy = false;
++        }
++    }
++
++    /**
++     * To be called if the cleanup could not be started after prepareOrderedCleanup()
++     *
++     * @returns {Promise<void>}
++     */
++    async abortOrderedCleanup() {
++        this.awaitingCleanupStart = false;
++
++        await this.restoreOriginalOrder();
++    }
++
++    /**
++     * @private
++     */
++    handleStateUpdate() {
++        if (this.busy || !this.getRestoreRecord()) {
++            return;
++        }
++
++        const status = this.robot.state.getFirstMatchingAttributeByConstructor(stateAttrs.StatusStateAttribute);
++        if (!status) {
++            return;
++        }
++
++        if (status.isActiveState) {
++            this.sawActiveState = true;
++
++            return;
++        }
++
++        // A resumable flag means that the job is paused, for example for a mop wash or a recharge
++        const isDone = (
++            [stateAttrs.StatusStateAttribute.VALUE.DOCKED, stateAttrs.StatusStateAttribute.VALUE.IDLE].includes(status.value) &&
++            status.flag !== stateAttrs.StatusStateAttribute.FLAG.RESUMABLE
++        );
++
++        if (!isDone || (this.awaitingCleanupStart && !this.sawActiveState)) {
++            return;
++        }
++
++        if (Date.now() - this.lastRestoreAttempt < RESTORE_RETRY_INTERVAL) {
++            return;
++        }
++
++        this.awaitingCleanupStart = false;
++
++        this.restoreOriginalOrder().catch(e => {
++            Logger.warn("Error while restoring the room order", e);
++        });
++    }
++
++    /**
++     * @private
++     * @returns {Promise<void>}
++     */
++    async restoreOriginalOrder() {
++        const record = this.getRestoreRecord();
++        if (!record || this.busy) {
++            return;
++        }
++
++        this.busy = true;
++        this.lastRestoreAttempt = Date.now();
++
++        try {
++            const changes = (await this.readRooms())
++                .filter(room => record.rooms[room.id] !== undefined && room.cleanSeq !== record.rooms[room.id])
++                .map(room => Object.assign({}, room, {cleanSeq: record.rooms[room.id]}));
++
++            if (changes.length > 0) {
++                await this.writeRooms(changes);
++            }
++
++            this.setRestoreRecord(undefined);
++        } catch (e) {
++            Logger.warn("Failed to restore the original room order. Will retry", e);
++        } finally {
++            this.busy = false;
++        }
++    }
++
++    /**
++     * @private
++     * @returns {Promise<Array<import("../../msmart/dtos/MSmartRoomInfoDTO").MSmartRoomInfo>>}
++     */
++    async readRooms() {
++        const response = await this.robot.sendCommand(new MSmartPacket({
++            messageType: MSmartPacket.MESSAGE_TYPE.ACTION,
++            payload: MSmartPacket.buildPayload(MSmartConst.ACTION.GET_ROOM_INFO)
++        }).toHexString());
++        const parsedResponse = BEightParser.PARSE(response);
++
++        // Version 1 lacks fields that would be reset by a write
++        if (!(parsedResponse instanceof dtos.MSmartRoomInfoDTO) || parsedResponse.version !== 2) {
++            throw new Error("Unexpected room info reply");
++        }
++
++        return parsedResponse.rooms;
++    }
++
++    /**
++     * @private
++     * @param {Array<import("../../msmart/dtos/MSmartRoomInfoDTO").MSmartRoomInfo>} rooms
++     * @returns {Promise<void>}
++     */
++    async writeRooms(rooms) {
++        const response = await this.robot.sendCommand(new MSmartPacket({
++            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
++            payload: MSmartPacket.buildRoomInfoPayloadV2(rooms)
++        }).toHexString());
++
++        if (response?.payload?.[3] !== 0x00) {
++            throw new Error("Room info write was rejected");
++        }
++    }
++
++    /**
++     * @private
++     * @returns {boolean}
++     */
++    isManagerNodePatched() {
++        if (this.robot.config.get("embedded") !== true) {
++            return false;
++        }
++
++        try {
++            return fs.readFileSync("/proc/mounts", "utf8")
++                .split("\n")
++                .some(line => line.split(" ")[1] === PATCHED_MANAGER_NODE_PATH);
++        } catch (e) {
++            return false;
++        }
++    }
++
++    /**
++     * @private
++     * @returns {{rooms: {[roomId: string]: number}}|undefined}
++     */
++    getRestoreRecord() {
++        return this.robot.config.get("robot")?.implementationSpecificConfig?.[RESTORE_RECORD_KEY];
++    }
++
++    /**
++     * @private
++     * @param {{rooms: {[roomId: string]: number}}|undefined} record
++     */
++    setRestoreRecord(record) {
++        const robotConfig = this.robot.config.get("robot");
++        const implementationSpecificConfig = Object.assign({}, robotConfig?.implementationSpecificConfig);
++
++        if (record) {
++            implementationSpecificConfig[RESTORE_RECORD_KEY] = record;
++        } else {
++            delete implementationSpecificConfig[RESTORE_RECORD_KEY];
++        }
++
++        this.robot.config.set("robot", Object.assign({}, robotConfig, {
++            implementationSpecificConfig: implementationSpecificConfig
++        }));
++    }
++}
++
++const PATCHED_MANAGER_NODE_PATH = "/usr/navi/manager_node";
++const RESTORE_RECORD_KEY = "roomOrderRestore";
++const RESTORE_RETRY_INTERVAL = 60 * 1000;
++
++module.exports = MideaRoomOrderHelper;

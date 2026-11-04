@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:07 +0100
+Subject: [PATCH 16/28] fix(midea): correct the carpet avoidance bit 3 quirk
+ description
+
+Bit 3 of the 0x5E carpet settings is stored by the firmware as
+carpet-setting-ai-aviod, i.e. camera/AI carpet detection feeding the
+avoidance map, not a larger distance margin to carpets.
+
+Retitle the quirk and fix its description. The id and the bit handling
+are unchanged.
+
+Based on static analysis; untested. The key name is confirmed, the exact
+behaviour is likely.
+
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index c05c7172..8f5490e3 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -379,8 +379,8 @@ class MideaQuirkFactory {
+             case MideaQuirkFactory.KNOWN_QUIRKS.INCREASED_CARPET_AVOIDANCE:
+                 return new Quirk({
+                     id: id,
+-                    title: "Increased Carpet Avoidance",
+-                    description: "When enabled, when avoiding carpets, the robot will stay further away from them.",
++                    title: "AI Carpet Detection",
++                    description: "When enabled, carpets detected by the camera are added to the carpet avoidance map in addition to the ones recorded by the carpet sensor.",
+                     options: ["off", "on"],
+                     getter: async () => {
+                         const response = await this.robot.sendCommand(new MSmartPacket({

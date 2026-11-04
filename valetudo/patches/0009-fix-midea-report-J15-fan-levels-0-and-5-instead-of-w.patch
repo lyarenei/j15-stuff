@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:21:13 +0100
+Subject: [PATCH 09/28] fix(midea): report J15 fan levels 0 and 5 instead of
+ warning
+
+The status can carry fan level 0 (off) and 5 (max), which are not
+presets. They were logged as unknown on every poll and the fan speed
+attribute was left stale. Report them as OFF and MAX; the preset list
+offered for setting is unchanged, so MAX stays unselectable.
+
+Based on static analysis of the motor speed encoder; whether the robot
+ever reports these in practice is unverified.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 98c10cb2..e6b917c2 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -281,7 +281,7 @@ class MideaValetudoRobot extends ValetudoRobot {
+         if (data.fan_level !== undefined) {
+             let matchingFanSpeed = Object.keys(this.fanSpeeds).find(key => {
+                 return this.fanSpeeds[key] === data.fan_level;
+-            });
++            }) ?? MideaValetudoRobot.FAN_SPEED_READ_ALIASES[data.fan_level];
+ 
+             if (matchingFanSpeed) {
+                 this.state.upsertFirstMatchingAttribute(new stateAttrs.PresetSelectionStateAttribute({
+@@ -1379,6 +1379,12 @@ MideaValetudoRobot.FAN_SPEEDS = Object.freeze({
+     // [stateAttrs.PresetSelectionStateAttribute.INTENSITY.MAX]: 5
+ });
+ 
++// Levels the firmware can report, but which are not offered as presets
++MideaValetudoRobot.FAN_SPEED_READ_ALIASES = Object.freeze({
++    0: stateAttrs.PresetSelectionStateAttribute.INTENSITY.OFF,
++    5: stateAttrs.PresetSelectionStateAttribute.INTENSITY.MAX,
++});
++
+ MideaValetudoRobot.OPERATION_MODES = Object.freeze({
+     [stateAttrs.PresetSelectionStateAttribute.MODE.VACUUM_AND_MOP]: 0,
+     [stateAttrs.PresetSelectionStateAttribute.MODE.VACUUM]: 1,

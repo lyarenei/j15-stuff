@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:35 +0100
+Subject: [PATCH 18/28] feat(midea): replace mop twist with gap deep cleaning
+ quirk
+
+The 0x9C 0x2e toggle that the V2 "mop twist" capability sets is the
+firmware's gap deep cleaning setting (SetGapDeepCleaningSwitch), which
+only applies while mopping. The real tail swing toggle (0x16) is not
+supported by this firmware.
+
+Stop registering the mop twist capability on the J15 Pro Ultra and add a
+"Gap Deep Cleaning" quirk with the same toggle and readback instead.
+
+Based on static analysis of the firmware; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index a89384e2..7712e10d 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -32,7 +32,6 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+             capabilities.MideaMopDockMopWashTemperatureControlCapability,
+             capabilities.MideaCarpetSensorModeControlCapabilityV2,
+             capabilities.MideaPetObstacleAvoidanceControlCapability,
+-            capabilities.MideaMopTwistControlCapabilityV2,
+             capabilities.MideaMopExtensionFurnitureLegHandlingControlCapability,
+             capabilities.MideaCarpetModeControlCapabilityV3,
+             capabilities.MideaMapSegmentMaterialControlCapability,
+@@ -85,6 +84,7 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.THRESHOLD_RECOGNITION),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.BRIDGE_BOOST),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.EDGE_DEEP_VACUUM),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.GAP_DEEP_CLEANING),
+             ]
+         }));
+ 
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 0510d73d..ae39bee5 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -793,6 +793,13 @@ class MideaQuirkFactory {
+                     toggleId: 0x31, // edge-deep-vacuum
+                     statusField: "edge_deep_vacuum_switch"
+                 });
++            case MideaQuirkFactory.KNOWN_QUIRKS.GAP_DEEP_CLEANING:
++                return this.getToggleQuirk(id, {
++                    title: "Gap Deep Cleaning",
++                    description: "Only applies to mopping. Cleans gaps more thoroughly.",
++                    toggleId: 0x2E, // gap deep cleaning
++                    statusField: "gap_deep_cleaning_switch"
++                });
+             default:
+                 throw new Error(`There's no quirk with id ${id}`);
+         }
+@@ -870,6 +877,7 @@ MideaQuirkFactory.KNOWN_QUIRKS = {
+     THRESHOLD_RECOGNITION: "2fa33876-f5ad-444d-9084-d51eb7be4670",
+     BRIDGE_BOOST: "17d539ff-51d3-49be-8b9e-29aa1e9c8d39",
+     EDGE_DEEP_VACUUM: "e49be100-2f39-4cf9-bf43-5ac0167c8775",
++    GAP_DEEP_CLEANING: "78b901cb-c0af-428a-8492-6b4b6293a800",
+ };
+ 
+ module.exports = MideaQuirkFactory;

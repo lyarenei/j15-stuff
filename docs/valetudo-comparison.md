@@ -35,6 +35,9 @@ maps, addresses and Valetudo file:line references:
 - **The firmware can do a lot more** than Valetudo exposes (around 28 toggles,
   per-room settings, schedules, go-to-point, carpet zones, and more).
 
+Most items below are fixed or worked around by the patched Valetudo build,
+see [valetudo-patches.md](valetudo-patches.md#patches).
+
 ## Safety note: cliff sensors
 
 Not a Valetudo bug, but found during this work. Every status frame in the

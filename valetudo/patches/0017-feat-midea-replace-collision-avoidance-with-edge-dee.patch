@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:35 +0100
+Subject: [PATCH 17/28] feat(midea): replace collision avoidance with edge deep
+ vacuum quirk
+
+The 0x9C 0x31 toggle that the "collision-avoidant navigation" capability
+sets is the firmware's edge deep vacuum setting. When vacuum-only
+cleaning, the robot backs off less at inner corners and runs corner
+manoeuvres, so it gets closer to walls. That is roughly the opposite of
+what the capability name suggests. It has no effect while mopping.
+
+Stop registering the capability on the J15 Pro Ultra and add an "Edge
+Deep Vacuum" quirk with the same toggle and readback instead. This also
+adds a generic toggle quirk helper to the quirk factory.
+
+Based on static analysis of the firmware; untested on the robot.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index 00be4d38..a89384e2 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -34,7 +34,6 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+             capabilities.MideaPetObstacleAvoidanceControlCapability,
+             capabilities.MideaMopTwistControlCapabilityV2,
+             capabilities.MideaMopExtensionFurnitureLegHandlingControlCapability,
+-            capabilities.MideaCollisionAvoidantNavigationControlCapability,
+             capabilities.MideaCarpetModeControlCapabilityV3,
+             capabilities.MideaMapSegmentMaterialControlCapability,
+             capabilities.MideaCleanRouteControlCapability,
+@@ -85,6 +84,7 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.MOP_DOCK_SELF_CLEANING_FREQUENCY),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.THRESHOLD_RECOGNITION),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.BRIDGE_BOOST),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.EDGE_DEEP_VACUUM),
+             ]
+         }));
+ 
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 8f5490e3..0510d73d 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -786,10 +786,72 @@ class MideaQuirkFactory {
+                         }).toHexString());
+                     }
+                 });
++            case MideaQuirkFactory.KNOWN_QUIRKS.EDGE_DEEP_VACUUM:
++                return this.getToggleQuirk(id, {
++                    title: "Edge Deep Vacuum",
++                    description: "Only applies to vacuum-only cleanups. The robot backs off less at inner corners and runs corner manoeuvres, so it cleans closer to walls.",
++                    toggleId: 0x31, // edge-deep-vacuum
++                    statusField: "edge_deep_vacuum_switch"
++                });
+             default:
+                 throw new Error(`There's no quirk with id ${id}`);
+         }
+     }
++
++    /**
++     * @param {string} id
++     * @param {object} options
++     * @param {string} options.title
++     * @param {string} options.description
++     * @param {number} options.toggleId
++     * @param {keyof MSmartStatusDTO} options.statusField
++     */
++    getToggleQuirk(id, options) {
++        return new Quirk({
++            id: id,
++            title: options.title,
++            description: options.description,
++            options: ["off", "on"],
++            getter: async () => {
++                const response = await this.robot.sendCommand(new MSmartPacket({
++                    messageType: MSmartPacket.MESSAGE_TYPE.ACTION,
++                    payload: MSmartPacket.buildPayload(MSmartConst.ACTION.GET_STATUS)
++                }).toHexString());
++                const parsedResponse = BEightParser.PARSE(response);
++
++                if (parsedResponse instanceof MSmartStatusDTO) {
++                    return parsedResponse[options.statusField] ? "on" : "off";
++                } else {
++                    throw new Error("Invalid response from robot");
++                }
++            },
++            setter: async (value) => {
++                let val;
++
++                switch (value) {
++                    case "off":
++                        val = 0;
++                        break;
++                    case "on":
++                        val = 1;
++                        break;
++                    default:
++                        throw new Error(`Invalid ${options.title} value: ${value}`);
++                }
++
++                await this.robot.sendCommand(new MSmartPacket({
++                    messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
++                    payload: MSmartPacket.buildPayload(
++                        MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
++                        Buffer.from([
++                            options.toggleId,
++                            val
++                        ])
++                    )
++                }).toHexString());
++            }
++        });
++    }
+ }
+ 
+ MideaQuirkFactory.KNOWN_QUIRKS = {
+@@ -807,6 +869,7 @@ MideaQuirkFactory.KNOWN_QUIRKS = {
+     MOP_DOCK_SELF_CLEANING_FREQUENCY: "8aa6f147-dbcc-44f6-a9f9-2a7f4fb59c7e",
+     THRESHOLD_RECOGNITION: "2fa33876-f5ad-444d-9084-d51eb7be4670",
+     BRIDGE_BOOST: "17d539ff-51d3-49be-8b9e-29aa1e9c8d39",
++    EDGE_DEEP_VACUUM: "e49be100-2f39-4cf9-bf43-5ac0167c8775",
+ };
+ 
+ module.exports = MideaQuirkFactory;

@@ -1,0 +1,276 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:33 +0100
+Subject: [PATCH 02/28] fix(midea): map J15 dock error codes from firmware
+ table
+
+Station error 100 is CollectDust, a dock activity rather than a fault.
+Don't switch the robot to ERROR for it; the dock status still shows
+EMPTYING via status byte 36.
+
+103 (dirty water tank full) and 104 (dirty water tank missing) now feed
+the dirty water tank dock component like 152 does, and have their own
+messages. 111 is the wash tray being full, 112 the robot's tank being
+full and 148 a duct switch error, replacing the previous texts.
+
+Also map the remaining named station codes that showed up as unknown:
+102, 108, 110, 113, 115, 116, 118, 119, 120, 130, 132, 133, 138, 144,
+145 and 153. The dustbag codes 11/12/13 stay; they are unreachable on
+this firmware but harmless.
+
+Based on static analysis of the StationErrors table; untested on the
+robot. Wording of the less obvious codes is derived from the internal
+names only.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 61f63a83..5e143026 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -242,11 +242,17 @@ class MideaValetudoRobot extends ValetudoRobot {
+             }
+ 
+             if (supportedDockComponents.includes(stateAttrs.DockComponentStateAttribute.TYPE.WATER_TANK_DIRTY)) {
++                let dirtyTankValue = stateAttrs.DockComponentStateAttribute.VALUE.OK;
++
++                if (data.station_error_code === 152 || data.station_error_code === 103) {
++                    dirtyTankValue = stateAttrs.DockComponentStateAttribute.VALUE.FULL;
++                } else if (data.station_error_code === 104) {
++                    dirtyTankValue = stateAttrs.DockComponentStateAttribute.VALUE.MISSING;
++                }
++
+                 this.state.upsertFirstMatchingAttribute(new stateAttrs.DockComponentStateAttribute({
+                     type: stateAttrs.DockComponentStateAttribute.TYPE.WATER_TANK_DIRTY,
+-                    value: data.station_error_code === 152 ?
+-                        stateAttrs.DockComponentStateAttribute.VALUE.FULL :
+-                        stateAttrs.DockComponentStateAttribute.VALUE.OK,
++                    value: dirtyTankValue,
+                 }));
+             }
+ 
+@@ -356,7 +362,10 @@ class MideaValetudoRobot extends ValetudoRobot {
+ 
+                 if (statusValue === stateAttrs.StatusStateAttribute.VALUE.ERROR) {
+                     statusError = this.mapErrorCode(this.ephemeralState.error_type, this.ephemeralState.error_desc);
+-                } else if (this.ephemeralState.station_error_code > 0) {
++                } else if (
++                    this.ephemeralState.station_error_code > 0 &&
++                    this.ephemeralState.station_error_code !== MideaValetudoRobot.STATION_CODE_COLLECT_DUST
++                ) {
+                     statusValue = stateAttrs.StatusStateAttribute.VALUE.ERROR;
+                     statusError = this.mapErrorCode(3, this.ephemeralState.station_error_code);
+                 }
+@@ -1043,11 +1052,11 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Stuck inside restricted area";
+                     break;
+-                case 100: // STATION_DISCONNECT
++                case 100: // COLLECT_DUST (not an error on the J15)
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+-                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.INFO;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+-                    parameters.message = "Dock communication error";
++                    parameters.message = "Auto-Empty Dock dust collection in progress";
+                     break;
+                 case 101: // ROBOT_NOT_IN_STATION
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+@@ -1055,6 +1064,24 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.NAVIGATION;
+                     parameters.message = "Robot not in dock";
+                     break;
++                case 102: // MOTOR_NOT_AT
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock motor not in position";
++                    break;
++                case 103: // DIRTY_WATER_FULL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Mop Dock Wastewater Tank full";
++                    break;
++                case 104: // NONE_DIRTY_TANK
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Mop Dock Wastewater Tank not installed";
++                    break;
+                 case 105: // WASH_WATER_BOX_UNINSTALL_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+@@ -1073,23 +1100,41 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Dock close error";
+                     break;
++                case 108: // HOT_NOT_ENOUGH
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock wash water not hot enough";
++                    break;
+                 case 109: // STATION_FAN_ERROR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Dock fan error";
+                     break;
+-                case 111: // STATION_RAG_BOX_FULL_ERROR
++                case 110: // MOTOR_UP_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock motor up error";
++                    break;
++                case 111: // WASH_SLOT_FULL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Mop Dock Wash Tray full";
++                    break;
++                case 112: // ROBOT_FULL
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+-                    parameters.message = "Mop Dock Tray not installed";
++                    parameters.message = "Robot water tank full";
+                     break;
+-                case 112: // ROBOT_WATER_BOX_FULL_ERROR
++                case 113: // BOX_NOT_INSTALLED
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+-                    parameters.message = "Mop Dock Tray full of water";
++                    parameters.message = "Dock box not installed";
+                     break;
+                 case 114: // MOP_LOSE_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+@@ -1097,12 +1142,42 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.ATTACHMENTS;
+                     parameters.message = "Lost mop pad";
+                     break;
++                case 115: // OPEN_CHARGE_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock charging open error";
++                    break;
++                case 116: // START_TIMER_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock timer start error";
++                    break;
+                 case 117: // W11PLUS_STATION_NO_WATER_MODULE_ERROR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Dock water module not installed";
+                     break;
++                case 118: // AUTO_UP_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock auto-water module raise error";
++                    break;
++                case 119: // AUTO_DOWN_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock auto-water module lower error";
++                    break;
++                case 120: // NONE_FILTER
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock filter missing";
++                    break;
+                 case 121: // DUST_FULL_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+@@ -1127,12 +1202,30 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Auto-Empty Dock cover open or missing dust bag";
+                     break;
++                case 130: // DUCT_BLOCKED
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock air duct blocked";
++                    break;
+                 case 131: // W11PLUS_CLEANING_LIQUID_LACK_ERROR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Dock cleaning liquid empty";
+                     break;
++                case 132: // NONE_WATER_BOX
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock water box not installed";
++                    break;
++                case 133: // LACK_WATER_2
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock water box empty";
++                    break;
+                 case 134: // WATER_INJECTION_TIMEOUT_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+@@ -1151,11 +1244,29 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Dock water level sensor error";
+                     break;
+-                case 148: // AIR_MOTOR_ERR
++                case 138: // HEAT_WATER_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock water heating error";
++                    break;
++                case 144: // WASH_SLOT_FULL_2
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Mop Dock Wash Tray full";
++                    break;
++                case 145: // DUST_NOT_INSTALL
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Auto-Empty Dock dust box not installed";
++                    break;
++                case 148: // DUCT_SWITCH_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+-                    parameters.message = "Dock air motor error";
++                    parameters.message = "Dock air duct switch error";
+                     break;
+                 case 149: // MOTOR_RAISED_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
+@@ -1181,6 +1292,12 @@ class MideaValetudoRobot extends ValetudoRobot {
+                     parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
+                     parameters.message = "Mop Dock Wastewater Tank full or not installed";
+                     break;
++                case 153: // PLUMB_WATER_TANK_ERR
++                    parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.PERMANENT;
++                    parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.ERROR;
++                    parameters.subsystem = ValetudoRobotError.SUBSYSTEM.DOCK;
++                    parameters.message = "Dock plumbed water tank error";
++                    break;
+                 case 204: // STATION_COMMUNICATION_ERR
+                     parameters.severity.kind = ValetudoRobotError.SEVERITY_KIND.TRANSIENT;
+                     parameters.severity.level = ValetudoRobotError.SEVERITY_LEVEL.WARNING;
+@@ -1238,6 +1355,9 @@ class MideaValetudoRobot extends ValetudoRobot {
+     }
+ }
+ 
++// Not an error: the dock is emptying the dustbin
++MideaValetudoRobot.STATION_CODE_COLLECT_DUST = 100;
++
+ MideaValetudoRobot.FAN_SPEEDS = Object.freeze({
+     //[stateAttrs.PresetSelectionStateAttribute.INTENSITY.OFF]: 0, Works on the J15PU, but not really useful here
+     [stateAttrs.PresetSelectionStateAttribute.INTENSITY.MIN]: 4,

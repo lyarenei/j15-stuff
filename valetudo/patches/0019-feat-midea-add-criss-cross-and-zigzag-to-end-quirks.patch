@@ -1,0 +1,59 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:19:06 +0100
+Subject: [PATCH 19/28] feat(midea): add criss-cross and zigzag to end quirks
+
+Expose the firmware's cleaning pattern toggles as quirks on the J15 Pro
+Ultra: criss-cross ("pound sign", 0x9C 0x18) and zigzag to end (0x9C
+0x27). Readback uses the already parsed status bits.
+
+Based on static analysis; untested. The toggle ids and readback bits are
+confirmed, the exact behaviour of the patterns is not.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index 7712e10d..94eb953c 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -85,6 +85,8 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.BRIDGE_BOOST),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.EDGE_DEEP_VACUUM),
+                 quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.GAP_DEEP_CLEANING),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.CRISS_CROSS),
++                quirkFactory.getQuirk(MideaQuirkFactory.KNOWN_QUIRKS.ZIGZAG_TO_END),
+             ]
+         }));
+ 
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index ae39bee5..20d45cba 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -800,6 +800,20 @@ class MideaQuirkFactory {
+                     toggleId: 0x2E, // gap deep cleaning
+                     statusField: "gap_deep_cleaning_switch"
+                 });
++            case MideaQuirkFactory.KNOWN_QUIRKS.CRISS_CROSS:
++                return this.getToggleQuirk(id, {
++                    title: "Criss-Cross Cleaning",
++                    description: "Clean in a criss-cross (pound sign) pattern with multiple passes.",
++                    toggleId: 0x18, // pound sign mode
++                    statusField: "pound_sign_switch"
++                });
++            case MideaQuirkFactory.KNOWN_QUIRKS.ZIGZAG_TO_END:
++                return this.getToggleQuirk(id, {
++                    title: "Zigzag To End",
++                    description: "Continue the zigzag cleaning pattern all the way to the end of the area.",
++                    toggleId: 0x27, // zigzag to end
++                    statusField: "zigzag_to_end_switch"
++                });
+             default:
+                 throw new Error(`There's no quirk with id ${id}`);
+         }
+@@ -878,6 +892,8 @@ MideaQuirkFactory.KNOWN_QUIRKS = {
+     BRIDGE_BOOST: "17d539ff-51d3-49be-8b9e-29aa1e9c8d39",
+     EDGE_DEEP_VACUUM: "e49be100-2f39-4cf9-bf43-5ac0167c8775",
+     GAP_DEEP_CLEANING: "78b901cb-c0af-428a-8492-6b4b6293a800",
++    CRISS_CROSS: "99dc2682-061e-4192-817e-efb720623cd0",
++    ZIGZAG_TO_END: "3d8106b5-3413-4df6-a427-596cab23b52f",
+ };
+ 
+ module.exports = MideaQuirkFactory;

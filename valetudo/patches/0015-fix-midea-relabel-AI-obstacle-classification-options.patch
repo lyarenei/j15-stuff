@@ -1,0 +1,63 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:18:02 +0100
+Subject: [PATCH 15/28] fix(midea): relabel AI obstacle classification options
+
+The firmware maps the 0x15 value 0, 1, 2 to the planner avoidance mode
+NORMAL, SUPER, SMART. "off" therefore never turned anything off and
+"normal" actually selected SMART.
+
+Rename the options to normal, super and smart and fix the description.
+The values sent to the robot are unchanged, so stored settings stay
+valid.
+
+Based on static analysis; untested. The value mapping is confirmed, the
+exact behaviour of the planner modes is not.
+
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 103dd233..c05c7172 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -127,8 +127,8 @@ class MideaQuirkFactory {
+                 return new Quirk({
+                     id: id,
+                     title: "AI Obstacle Classification",
+-                    description: "Controls whether and how hard the robot should try to actually understand and work around the encountered obstacles.",
+-                    options: ["off", "high", "normal"],
++                    description: "Selects the obstacle avoidance mode of the robot: normal is the baseline, smart and super make it try harder to recognize and work around obstacles.",
++                    options: ["normal", "smart", "super"],
+                     getter: async () => {
+                         const packet = new MSmartPacket({
+                             messageType: MSmartPacket.MESSAGE_TYPE.ACTION,
+@@ -141,11 +141,11 @@ class MideaQuirkFactory {
+                         if (parsedResponse instanceof MSmartCleaningSettings1DTO) {
+                             switch (parsedResponse.ai_grade_avoidance_mode) {
+                                 case 0:
+-                                    return "off";
++                                    return "normal";
+                                 case 1:
+-                                    return "high";
++                                    return "super";
+                                 case 2:
+-                                    return "normal";
++                                    return "smart";
+                             }
+                         } else {
+                             throw new Error("Invalid response from robot");
+@@ -155,13 +155,13 @@ class MideaQuirkFactory {
+                         let val;
+ 
+                         switch (value) {
+-                            case "off":
++                            case "normal":
+                                 val = 0;
+                                 break;
+-                            case "high":
++                            case "super":
+                                 val = 1;
+                                 break;
+-                            case "normal":
++                            case "smart":
+                                 val = 2;
+                                 break;
+                             default:

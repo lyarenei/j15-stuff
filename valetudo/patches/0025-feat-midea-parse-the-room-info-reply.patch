@@ -1,0 +1,224 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:52:17 +0100
+Subject: [PATCH 25/28] feat(midea): parse the room info reply
+
+ACTION 0x28 returns every room with its stored clean count, fan speed,
+water level, clean sequence, fluid type, vacuum/mop mode and route type.
+The J15 Pro Ultra replies with version 2 (9-byte entries behind a stride
+byte), older firmware with version 1 (5 bytes per room).
+
+Fan, water and route are in the IoT encodings that SETTING 0x2B decodes,
+so they can be written back unchanged.
+
+Based on static analysis; untested on the robot.
+
+diff --git a/backend/lib/msmart/BEightParser.js b/backend/lib/msmart/BEightParser.js
+index 48cd10e4..64e81d49 100644
+--- a/backend/lib/msmart/BEightParser.js
++++ b/backend/lib/msmart/BEightParser.js
+@@ -116,6 +116,11 @@ class BEightParser {
+ 
+                         return new dtos.MSmartActiveZonesDTO(data);
+                     }
++                    case MSmartConst.ACTION.GET_ROOM_INFO: {
++                        const data = BEightParser._parse_room_info_payload(payload);
++
++                        return new dtos.MSmartRoomInfoDTO(data);
++                    }
+                     case MSmartConst.ACTION.GET_DOCK_POSITION: {
+                         const data = BEightParser._parse_dock_position(payload);
+ 
+@@ -661,6 +666,51 @@ class BEightParser {
+         return { segmentIds: segmentIds };
+     }
+ 
++    /**
++     * The v2 reply (J15 Pro Ultra) has a stride byte in front of 9-byte entries, v1 has 5-byte entries.
++     * Fan, water and route use the same IoT encodings that SETTING 0x2B expects.
++     *
++     * @private
++     * @param {Buffer} payload
++     * @returns {object}
++     */
++    static _parse_room_info_payload(payload) {
++        const version = payload.readUInt8(1);
++        const roomCount = payload.readUInt8(3);
++        const stride = version >= 2 ? payload.readUInt8(5) : 5;
++        let offset = version >= 2 ? 6 : 5;
++
++        if (roomCount > 0 && stride < (version >= 2 ? 9 : 5)) {
++            throw new Error(`Invalid room info entry size ${stride}`);
++        }
++
++        const rooms = [];
++        for (let i = 0; i < roomCount; i++) {
++            if (offset + stride > payload.length) {
++                throw new Error("Room info payload is truncated");
++            }
++
++            const room = {
++                id: payload[offset],
++                cleanCount: payload[offset + 1],
++                fanSpeed: payload[offset + 2],
++                waterLevel: payload[offset + 3],
++                cleanSeq: payload[offset + 4]
++            };
++
++            if (version >= 2) {
++                room.fluidType = payload[offset + 5];
++                room.vacuumMopMode = payload[offset + 7];
++                room.routeType = payload[offset + 8];
++            }
++
++            rooms.push(room);
++            offset += stride;
++        }
++
++        return { version: version, rooms: rooms };
++    }
++
+     /**
+      *
+      * @private
+diff --git a/backend/lib/msmart/MSmartConst.js b/backend/lib/msmart/MSmartConst.js
+index 08b46cf9..ea67f663 100644
+--- a/backend/lib/msmart/MSmartConst.js
++++ b/backend/lib/msmart/MSmartConst.js
+@@ -13,6 +13,8 @@ const SETTING = Object.freeze({
+     JOIN_SEGMENTS: 0x26,
+     SPLIT_SEGMENT: 0x27,
+ 
++    SET_ROOM_INFO: 0x2B,
++
+     SET_VALID_MAP_IDS: 0x2D, // Used by the cloud to sync cloud state with device state. The cloud being higher prio
+ 
+     SET_FLOOR_TYPE: 0x31,
+@@ -42,6 +44,7 @@ const ACTION = Object.freeze({
+     POLL_MAP: 0x22,
+     GET_DOCK_POSITION: 0x24,
+     GET_ACTIVE_ZONES: 0x27,
++    GET_ROOM_INFO: 0x28,
+ 
+     GET_ACTIVE_SEGMENTS: 0x30,
+ 
+diff --git a/backend/lib/msmart/dtos/MSmartRoomInfoDTO.js b/backend/lib/msmart/dtos/MSmartRoomInfoDTO.js
+new file mode 100644
+index 00000000..63dcfb3f
+--- /dev/null
++++ b/backend/lib/msmart/dtos/MSmartRoomInfoDTO.js
+@@ -0,0 +1,33 @@
++const MSmartDTO = require("./MSmartDTO");
++
++class MSmartRoomInfoDTO extends MSmartDTO {
++    /**
++     * Version 1 replies only contain id, cleanCount, fanSpeed, waterLevel and cleanSeq
++     *
++     * @param {object} data
++     * @param {number} data.version
++     * @param {Array<MSmartRoomInfo>} data.rooms
++     */
++    constructor(data) {
++        super();
++
++        this.version = data.version;
++        this.rooms = data.rooms;
++
++        Object.freeze(this);
++    }
++}
++
++/**
++ * @typedef {object} MSmartRoomInfo
++ * @property {number} id
++ * @property {number} cleanCount
++ * @property {number} fanSpeed
++ * @property {number} waterLevel
++ * @property {number} cleanSeq
++ * @property {number} [fluidType]
++ * @property {number} [vacuumMopMode]
++ * @property {number} [routeType]
++ */
++
++module.exports = MSmartRoomInfoDTO;
+diff --git a/backend/lib/msmart/dtos/index.js b/backend/lib/msmart/dtos/index.js
+index 5806a108..e9feeb36 100644
+--- a/backend/lib/msmart/dtos/index.js
++++ b/backend/lib/msmart/dtos/index.js
+@@ -11,5 +11,6 @@ module.exports = {
+     MSmartMapListDTO: require("./MSmartMapListDTO"),
+     MSmartMopDockDryingSettingsDTO: require("./MSmartMopDockDryingSettingsDTO"),
+     MSmartMopDockSettingsDTO: require("./MSmartMopDockSettingsDTO"),
++    MSmartRoomInfoDTO: require("./MSmartRoomInfoDTO"),
+     MSmartStatusDTO: require("./MSmartStatusDTO"),
+ };
+diff --git a/backend/test/lib/msmart/BEightParser_test.js b/backend/test/lib/msmart/BEightParser_test.js
+index f4087cee..d4696509 100644
+--- a/backend/test/lib/msmart/BEightParser_test.js
++++ b/backend/test/lib/msmart/BEightParser_test.js
+@@ -392,4 +392,65 @@ describe("BEightParser", () => {
+             assert.deepEqual(data, { currentMapId: 2, savedMapIds: [1] });
+         });
+     });
++
++    describe("Room info", () => {
++        const buildReply = (payload) => {
++            return MSmartPacket.FROM_BYTES(new MSmartPacket({
++                messageType: MSmartPacket.MESSAGE_TYPE.ACTION,
++                payload: Buffer.from(payload, "hex")
++            }).toBytes());
++        };
++
++        it("parses a v2 room info reply", () => {
++            const data = BEightParser.PARSE(buildReply(
++                "aa0228" + "02" + "00" + "09" +
++                "01" + "02" + "03" + "69" + "00" + "01" + "00" + "02" + "01" +
++                "07" + "01" + "01" + "64" + "02" + "00" + "00" + "00" + "03"
++            ));
++
++            assert.deepEqual(data, {
++                version: 2,
++                rooms: [
++                    {id: 1, cleanCount: 2, fanSpeed: 3, waterLevel: 0x69, cleanSeq: 0, fluidType: 1, vacuumMopMode: 2, routeType: 1},
++                    {id: 7, cleanCount: 1, fanSpeed: 1, waterLevel: 0x64, cleanSeq: 2, fluidType: 0, vacuumMopMode: 0, routeType: 3}
++                ]
++            });
++        });
++
++        it("honours the stride of a v2 room info reply", () => {
++            const data = BEightParser.PARSE(buildReply(
++                "aa0228" + "02" + "00" + "0a" +
++                "01" + "01" + "01" + "64" + "01" + "00" + "00" + "00" + "01" + "ff" +
++                "02" + "01" + "01" + "64" + "02" + "00" + "00" + "00" + "01" + "ff"
++            ));
++
++            assert.deepEqual(data.rooms.map(r => r.cleanSeq), [1, 2]);
++        });
++
++        it("parses a v1 room info reply", () => {
++            const data = BEightParser.PARSE(buildReply(
++                "aa0128" + "01" + "00" +
++                "05" + "01" + "02" + "02" + "03"
++            ));
++
++            assert.deepEqual(data, {
++                version: 1,
++                rooms: [
++                    {id: 5, cleanCount: 1, fanSpeed: 2, waterLevel: 2, cleanSeq: 3}
++                ]
++            });
++        });
++
++        it("parses a room info reply without rooms", () => {
++            const data = BEightParser.PARSE(buildReply("aa0228000009"));
++
++            assert.deepEqual(data, {version: 2, rooms: []});
++        });
++
++        it("throws on a truncated room info reply", () => {
++            assert.throws(() => {
++                BEightParser.PARSE(buildReply("aa0228" + "02" + "00" + "09" + "01" + "02" + "03"));
++            });
++        });
++    });
+ });

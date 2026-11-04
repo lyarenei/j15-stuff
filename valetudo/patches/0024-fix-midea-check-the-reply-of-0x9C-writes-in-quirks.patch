@@ -1,0 +1,257 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Wed, 4 Nov 2026 19:25:24 +0100
+Subject: [PATCH 24/28] fix(midea): check the reply of 0x9C writes in quirks
+
+Route all SET_VARIOUS_TOGGLES writes in the quirk factory and the
+Midea capabilities through setToggle so rejected writes throw.
+
+diff --git a/backend/lib/robots/midea/MideaQuirkFactory.js b/backend/lib/robots/midea/MideaQuirkFactory.js
+index 506df6ab..783f84a1 100644
+--- a/backend/lib/robots/midea/MideaQuirkFactory.js
++++ b/backend/lib/robots/midea/MideaQuirkFactory.js
+@@ -6,6 +6,7 @@ const MSmartMopDockSettingsDTO = require("../../msmart/dtos/MSmartMopDockSetting
+ const MSmartPacket = require("../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../msmart/dtos/MSmartStatusDTO");
+ const Quirk = require("../../core/Quirk");
++const {setToggle} = require("../../msmart/MSmartToggles");
+ 
+ class MideaQuirkFactory {
+     /**
+@@ -168,18 +169,7 @@ class MideaQuirkFactory {
+                                 throw new Error(`Invalid obstacle avoidance sensitivity value: ${value}`);
+                         }
+ 
+-                        const packet = new MSmartPacket({
+-                            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                            payload: MSmartPacket.buildPayload(
+-                                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                                Buffer.from([
+-                                    0x15, // super-obstacle
+-                                    val
+-                                ])
+-                            )
+-                        });
+-
+-                        await this.robot.sendCommand(packet.toHexString());
++                        await setToggle(this.robot, 0x15, val);
+                     }
+                 });
+             case MideaQuirkFactory.KNOWN_QUIRKS.QUIET_AUTO_EMPTY:
+@@ -458,16 +448,7 @@ class MideaQuirkFactory {
+                                 throw new Error(`Invalid stain cleaning value: ${value}`);
+                         }
+ 
+-                        await this.robot.sendCommand(new MSmartPacket({
+-                            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                            payload: MSmartPacket.buildPayload(
+-                                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                                Buffer.from([
+-                                    0x08, // Stain Cleaning
+-                                    val
+-                                ])
+-                            )
+-                        }).toHexString());
++                        await setToggle(this.robot, 0x08, val);
+                     }
+                 });
+ 
+@@ -729,16 +710,7 @@ class MideaQuirkFactory {
+                                 throw new Error(`Invalid threshold recognition value: ${value}`);
+                         }
+ 
+-                        await this.robot.sendCommand(new MSmartPacket({
+-                            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                            payload: MSmartPacket.buildPayload(
+-                                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                                Buffer.from([
+-                                    0x3A,
+-                                    val
+-                                ])
+-                            )
+-                        }).toHexString());
++                        await setToggle(this.robot, 0x3A, val);
+                     }
+                 });
+             case MideaQuirkFactory.KNOWN_QUIRKS.BRIDGE_BOOST:
+@@ -774,16 +746,7 @@ class MideaQuirkFactory {
+                                 throw new Error(`Invalid bridge boost value: ${value}`);
+                         }
+ 
+-                        await this.robot.sendCommand(new MSmartPacket({
+-                            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                            payload: MSmartPacket.buildPayload(
+-                                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                                Buffer.from([
+-                                    0x1C,
+-                                    val
+-                                ])
+-                            )
+-                        }).toHexString());
++                        await setToggle(this.robot, 0x1C, val);
+                     }
+                 });
+             case MideaQuirkFactory.KNOWN_QUIRKS.EDGE_DEEP_VACUUM:
+@@ -923,16 +886,7 @@ class MideaQuirkFactory {
+                         throw new Error(`Invalid ${options.title} value: ${value}`);
+                 }
+ 
+-                await this.robot.sendCommand(new MSmartPacket({
+-                    messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-                    payload: MSmartPacket.buildPayload(
+-                        MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                        Buffer.from([
+-                            options.toggleId,
+-                            val
+-                        ])
+-                    )
+-                }).toHexString());
++                await setToggle(this.robot, options.toggleId, val);
+             }
+         });
+     }
+diff --git a/backend/lib/robots/midea/capabilities/MideaCollisionAvoidantNavigationControlCapability.js b/backend/lib/robots/midea/capabilities/MideaCollisionAvoidantNavigationControlCapability.js
+index 28fbb677..5095b048 100644
+--- a/backend/lib/robots/midea/capabilities/MideaCollisionAvoidantNavigationControlCapability.js
++++ b/backend/lib/robots/midea/capabilities/MideaCollisionAvoidantNavigationControlCapability.js
+@@ -3,6 +3,7 @@ const CollisionAvoidantNavigationControlCapability = require("../../../core/capa
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends CollisionAvoidantNavigationControlCapability<import("../MideaValetudoRobot")>
+@@ -34,36 +35,14 @@ class MideaCollisionAvoidantNavigationControlCapability extends CollisionAvoidan
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x31, // Edge Deep
+-                    0x01 // true
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x31, 1); // Edge Deep
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        const packet = new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x31, // Edge Deep
+-                    0x00 // false
+-                ])
+-            )
+-        });
+-
+-        await this.robot.sendCommand(packet.toHexString());
++        await setToggle(this.robot, 0x31, 0); // Edge Deep
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV1.js b/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV1.js
+index 294e029c..45514d8c 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV1.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV1.js
+@@ -3,6 +3,7 @@ const MopTwistControlCapability = require("../../../core/capabilities/MopTwistCo
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends MopTwistControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaMopTwistControlCapabilityV1 extends MopTwistControlCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x16, // SUPER_TAIL_FLICK_CLEANING
+-                    0x01 // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x16, 1); // SUPER_TAIL_FLICK_CLEANING
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x16, // SUPER_TAIL_FLICK_CLEANING
+-                    0x00 // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x16, 0); // SUPER_TAIL_FLICK_CLEANING
+     }
+ }
+ 
+diff --git a/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV2.js b/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV2.js
+index b28d14bf..89cd0e67 100644
+--- a/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV2.js
++++ b/backend/lib/robots/midea/capabilities/MideaMopTwistControlCapabilityV2.js
+@@ -3,6 +3,7 @@ const MopTwistControlCapability = require("../../../core/capabilities/MopTwistCo
+ const MSmartConst = require("../../../msmart/MSmartConst");
+ const MSmartPacket = require("../../../msmart/MSmartPacket");
+ const MSmartStatusDTO = require("../../../msmart/dtos/MSmartStatusDTO");
++const {setToggle} = require("../../../msmart/MSmartToggles");
+ 
+ /**
+  * @extends MopTwistControlCapability<import("../MideaValetudoRobot")>
+@@ -30,32 +31,14 @@ class MideaMopTwistControlCapabilityV2 extends MopTwistControlCapability {
+      * @returns {Promise<void>}
+      */
+     async enable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2e, // Gap Deep Cleaning
+-                    0x01 // true
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2e, 1); // Gap Deep Cleaning
+     }
+ 
+     /**
+      * @returns {Promise<void>}
+      */
+     async disable() {
+-        await this.robot.sendCommand(new MSmartPacket({
+-            messageType: MSmartPacket.MESSAGE_TYPE.SETTING,
+-            payload: MSmartPacket.buildPayload(
+-                MSmartConst.SETTING.SET_VARIOUS_TOGGLES,
+-                Buffer.from([
+-                    0x2e, // Gap Deep Cleaning
+-                    0x00 // false
+-                ])
+-            )
+-        }).toHexString());
++        await setToggle(this.robot, 0x2e, 0); // Gap Deep Cleaning
+     }
+ }
+ 
