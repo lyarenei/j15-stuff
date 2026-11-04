@@ -10,6 +10,13 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   (dead sensor, loose cable, driver, capture).
 - **persistlog**: keeps the robot's logs across reboots (the firmware keeps
   them in RAM, and only about a day's worth). Installed separately.
+- **roomorder**: makes the robot clean selected rooms in the order you
+  selected them, by patching 4 bytes in a copy of its `manager_node`
+  (bind-mounted over the original). Installed separately; restarts the robot's
+  nodes once.
+- **patched Valetudo**: a patch series on top of a Valetudo release, built
+  into an aarch64 binary and installed over the stock one. Installed
+  separately; the stock binary is backed up and can be restored.
 - **[docs/](docs/)**: hardware and firmware findings, and ongoing
   investigations:
 
@@ -20,10 +27,11 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   | [firmware-internals.md](docs/firmware-internals.md) | processes, ubus API, "mass" IPC, video frame format, logs |
   | [modifying-firmware.md](docs/modifying-firmware.md) | boot chain, vendor debug mode, ways to change behaviour, risks |
   | [mop-lift-investigation.md](docs/mop-lift-investigation.md) | **open**: right mop pad sometimes doesn't lift |
-  | [room-order-investigation.md](docs/room-order-investigation.md) | rooms aren't cleaned in the selected order: cause and planned patch |
+  | [room-order-investigation.md](docs/room-order-investigation.md) | rooms aren't cleaned in the selected order: cause, the two fixes, how `manager_node` gets restarted |
   | [valetudo-comparison.md](docs/valetudo-comparison.md) | where Valetudo's Midea driver and the firmware disagree (labels, enums, error codes, unexposed features) |
   | [corner-cleaning-investigation.md](docs/corner-cleaning-investigation.md) | corner and edge cleaning routines, which switches turn them on |
   | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, what Valetudo exposes, options for level warnings |
+  | [valetudo-patches.md](docs/valetudo-patches.md) | how the Valetudo patch series is built, edited, rebased and installed |
   | [persistent-logs.md](docs/persistent-logs.md) | how the firmware rotates logs, and keeping them across reboots |
   | [research-workflow.md](docs/research-workflow.md) | how to dump, analyse and reproduce these findings |
 
@@ -35,7 +43,11 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 
 This modifies a device you own. Each component only adds files
 in `/userdata` and one line in `/oem/_root_postboot.sh`, and its uninstall
-command removes both (persistlog keeps the logs it saved).
+command removes both (persistlog keeps the logs it saved). roomorder also
+bind-mounts a patched `manager_node` over the vendor one at boot; uninstalling
+unmounts it. The Valetudo
+component has no boot hook; it replaces `/userdata/valetudo` and keeps the
+stock binary as `/userdata/valetudo.stock`.
 
 I have absolutely no idea what I am doing, I would not be able to do something
 like this without Claude or other LLMs.
@@ -159,6 +171,45 @@ doesn't need camstream and doesn't need a build:
 interval, extra logs) are in `/userdata/persistlog.conf`. Cloud connection
 logs, core dumps and map images are never copied. Details are in
 [docs/persistent-logs.md](docs/persistent-logs.md).
+
+## Room order
+
+When you select several rooms, the firmware cleans them in its own order, not
+yours (cause in
+[docs/room-order-investigation.md](docs/room-order-investigation.md)).
+`roomorder` fixes that on the robot: it copies `/usr/navi/manager_node` to
+`/userdata/roomorder`, changes one instruction in the copy, and bind-mounts it
+over the original at every boot. The vendor binary is never shipped, and the
+installer refuses to do anything unless the robot's `manager_node` is exactly
+the firmware version the patch was written for.
+
+```sh
+./install.sh roomorder-install   <ip> [ssh options]
+./install.sh roomorder-status    <ip> [ssh options]   # mount active? running binary? boot hook? log
+./install.sh roomorder-uninstall <ip> [ssh options]   # unmounts, restarts manager_node, removes files
+```
+
+Installing, uninstalling and every boot **restart all the robot's nodes**
+(`/usr/bin/track` restarts the whole stack when `manager_node` dies; about a
+minute). Don't do it during a clean. Not tested on the robot yet. The patched
+Valetudo notices the mount and then doesn't write the clean sequence itself
+(see [docs/valetudo-patches.md](docs/valetudo-patches.md)).
+
+## Patched Valetudo
+
+`valetudo/patches/` holds a patch series on top of the Valetudo release in
+`valetudo/BASE`. `valetudo/build.sh` builds it (needs `git`, `node` 20+ and
+`npm`), and the installer swaps it in for the stock binary:
+
+```sh
+valetudo/build.sh                                       # → build/valetudo-aarch64
+./install.sh valetudo-install   <ip> [ssh options]      # backs up the stock binary, disables auto-update
+./install.sh valetudo-status    <ip> [ssh options]      # running? patched or stock? backup present?
+./install.sh valetudo-uninstall <ip> [ssh options]      # restores the stock binary
+```
+
+Not tested on the robot yet. Details, caveats and how to add patches are in
+[docs/valetudo-patches.md](docs/valetudo-patches.md).
 
 ## Viewing in Home Assistant or a browser
 
