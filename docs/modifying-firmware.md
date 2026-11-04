@@ -2,7 +2,8 @@
 
 Notes on how the robot software could be changed or extended, from least to
 most invasive. Apart from adding programs on the IPC bus (which `camstream`
-does), **none of this has been tried yet**.
+does), **none of this has been tried on the robot yet**. The `roomorder`
+patch (approach 4) is implemented but untested.
 
 ## Why it's feasible
 
@@ -43,9 +44,16 @@ does), **none of this has been tried yet**.
   `detect_node`, `manager_node`, `semantic_slam_node` and `media_node`, then
   `ubusd.sh`, `audio_node.sh` and `video_node.sh`.
 - `/usr/navi/stop` kills all of them.
-- `/usr/bin/track` runs alongside the nodes. It's probably a supervisor
-  that restarts crashed processes (not verified). Check how it reacts
-  before killing or replacing a node.
+- `/usr/bin/track` runs alongside the nodes and **is** a supervisor. Once a
+  second it checks the pid files in `/var/run` (`manager.pid`, `planner.pid`,
+  ...). When a node's pid is dead it removes the pid file and restarts it. For
+  `manager_node`, `data_node`, `laser_slam3_node` and `planner_node` the
+  restart command is `cd /usr/navi && ./stop* ; ./start*`, so **killing one of
+  these restarts the whole navigation stack**; the other nodes are restarted
+  from their old `/proc/PID/cwd` and `cmdline`. In vendor debug mode
+  (`/oem/midea_autorun` exists) it does nothing. Found by static analysis,
+  not tested; details in
+  [room-order-investigation.md](room-order-investigation.md#restarting-manager_node).
 - `/oem/test.mod` must stay `FOFF`. Anything else boots the factory test
   stack (`/usr/bin/rk_pcba_test/echo_pcbatest_server`).
 
@@ -98,7 +106,9 @@ mode, below).
 
 Copy a node to `/userdata`, change a few bytes (flip a branch, change a
 constant), mount it over `/usr/navi/<node>` and restart the node. Good for
-targeted fixes. As reversible as option 2.
+targeted fixes. As reversible as option 2. Restart the node by killing it
+and letting `track` do it (it restarts every node, see above); the `roomorder`
+component does this.
 
 ### 5. Midea's debug mode (`/usr/sbin/debug_mode.sh`)
 

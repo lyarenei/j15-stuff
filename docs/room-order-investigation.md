@@ -1,6 +1,8 @@
 # Investigation: cleaning rooms in the selected order
 
-**Status:** cause found, fix designed but not yet built or tested.
+**Status:** cause found. Two fixes are packaged: the `roomorder` firmware
+patch (`./install.sh roomorder-install`) and a `cleanSeq` write in the
+patched Valetudo. Both are implemented, **untested on the robot**.
 Started 2026-11-04.
 
 ## Symptom
@@ -16,9 +18,9 @@ segment clean doesn't clean them in that order. The order looks random.
   per-room **`cleanSeq`** first (sorted by it), the rest by the firmware's
   own proximity ranking.
 - `planner_node` then cleans in exactly the order `manager_node` gives it.
-- So the order isn't random, it's the firmware's ranking. A one-instruction
-  patch in `manager_node` should make it keep the request order (see
-  [The fix](#the-fix)).
+- So the order isn't random, it's the firmware's ranking. Two ways around it
+  (see [Options](#options)): a one-instruction patch in `manager_node`, or
+  setting `cleanSeq` on the selected rooms before the clean.
 
 Everything below is static analysis of the binaries listed in
 [research-workflow.md](research-workflow.md#binaries-examined). No room
@@ -87,12 +89,14 @@ the order comes entirely from the ranking. That's the "random" order.
   `CCentralController::SetRoomInfo` (`0x7789d0`). This is probably what the
   Midea app's "cleaning sequence" setting uses. A JSON entry point,
   `ThingsModel::CommandRoomInfo`, also exists.
-- Which MSmart packet reaches `SetRoomInfo` is **not known**. Valetudo
-  doesn't send one: its segment names live only on the Valetudo side
-  (`MideaMapHacksProvider`). Probably SETTING `0x2B`
-  (`handleIotMsg0x02_0x2B` → `CCentralController::SetRoomInfo`; fan at
-  byte +4, water +5, route +7 per room). Which byte is `cleanSeq` isn't
-  decoded yet, see [valetudo-comparison.md](valetudo-comparison.md).
+- The packet that reaches `SetRoomInfo` is **SETTING `0x2B`**
+  (`handleIotMsg0x02_0x2B` `0x80ef60`). In the v2 layout (`[11]=2`) `cleanSeq`
+  is entry byte +6. v1 has it at +6 too but leaves some fields as stack
+  garbage, so use v2. The read side is ACTION `0x03 0x28` (`cleanSeq` at
+  byte +4 of each 9-byte entry). Full layouts in
+  [valetudo-comparison/room-info.md](valetudo-comparison/room-info.md).
+  Valetudo sends none of this for ordering: its segment names live only on
+  the Valetudo side (`MideaMapHacksProvider`).
 - The 0x03 handler reads only room id and count per slot, plus the first
   room's mode byte; Valetudo's per-room fan and water bytes are ignored
   ([features.md](valetudo-comparison/features.md), M3).
@@ -122,18 +126,11 @@ Entry layout of a room in `RoomsCleanParam` (29 bytes), as far as known:
 | `+0x18` | u8 | `vacuum_mop_mode` |
 | `+0x19` | i32 | `route_type` |
 
-## Options considered
+## Options
 
-1. **Valetudo change.** Before each segment clean, set `cleanSeq` = 1…N on
-   the selected rooms (0 on the others) through the cloud protocol, then
-   start the clean and turn on `customOrderSupport`. This needs the unknown
-   `SetRoomInfo` packet, and it means maintaining a Valetudo fork, because
-   upstream is unlikely to take external contributions. **Rejected.**
-2. **Patch `manager_node`** so a room selection keeps the request order.
-   It doesn't depend on Valetudo, and it has to be re-applied after firmware
-   updates, which are rare. **Chosen.**
+Both give the selection order. They can be installed together.
 
-## The fix
+### 1. `roomorder`: patch `manager_node` (firmware side)
 
 Replace the `cbz w0, 0x87d9d4` at `0x87d8e8` with a `nop`. Every selected
 room then goes into the "seg" list in request order. With every
@@ -146,6 +143,7 @@ The "nor" list stays empty and the ranking isn't used.
 | Address | `0x87d8e8` (file offset `0x47d8e8`) |
 | Original | `60 07 00 34` (`cbz w0, 0x87d9d4`) |
 | Patched | `1f 20 03 d5` (`nop`) |
+| Patched file sha256 | `c91f58059e761194c8196bde2bd82dc348a9935427f241ff773b3fac6e477620` |
 
 - Only the room-selection branch changes. Whole-house cleans take the
   `whole_house == true` branch (`0x87d924`) and aren't affected.
@@ -153,24 +151,153 @@ The "nor" list stays empty and the ranking isn't used.
   set by the Midea app before rooting), the bubble sort would still move
   them relative to each other. Check the saved room map for non-zero
   `cleanSeq` values first.
-- Valetudo still reports `customOrderSupport: false`, so its UI doesn't
-  show order numbers. The order of selection is still what gets sent.
+- Needs no Valetudo change. Valetudo still reports `customOrderSupport:
+  false`, so its UI doesn't show order numbers; the selection order is what
+  gets sent.
+- Must be re-created after a firmware update (the installer refuses other
+  versions).
 
-### Packaging (planned)
+### 2. Valetudo writes `cleanSeq` around a segment clean (protocol side)
 
-- A separate component, independent of `camstream`, so users can install
-  either one.
-- Don't ship the vendor binary. Patch the robot's own copy on the robot:
-  check the sha256 and the 4 original bytes, write the patched copy to
-  `/userdata`, and refuse to patch if either doesn't match (another
-  firmware version).
-- Apply it with a bind mount over `/usr/navi/manager_node` (approach 4 in
-  [modifying-firmware.md](modifying-firmware.md)). The boot hook runs
-  *after* `start-dushu` has already started the nodes, so `manager_node` has
-  to be restarted after mounting. Before doing that, find out how
-  `/usr/bin/track` reacts to a node being restarted.
-- Uninstall removes the mount and the patched copy. A reboot without the
-  hook restores the original.
+Implemented in the patched Valetudo ([valetudo-patches.md](valetudo-patches.md)),
+following [room-info.md §5](valetudo-comparison/room-info.md#5-ordered-segment-clean-without-the-manager_node-patch):
+
+1. Read all rooms (ACTION `0x03 0x28`).
+2. Send SETTING `0x2B` v2 with `cleanSeq` = 1...N on the selected rooms and 0
+   on the others, everything else written back unchanged.
+3. Start the segment clean (SETTING `0x03`) as before.
+4. After the clean, send `0x2B` again with the original `cleanSeq` values.
+
+When the `roomorder` mount is active (`/usr/navi/manager_node` is a mount
+target in `/proc/mounts`), the patched Valetudo skips this and relies on the
+firmware patch.
+
+### Trade-offs
+
+| | `roomorder` patch | Valetudo writes `cleanSeq` |
+|---|---|---|
+| Touches | the robot's firmware path (bind mount, whole stack restarts once per install, uninstall and boot) | nothing on the robot |
+| Flash writes | none per clean | each `0x2B` runs `CRoomMap::Save`, so two writes per clean |
+| Whole-house cleans | unchanged | **reordered while `cleanSeq` is set** (`PlannerStartRoomsClean` also calls `SequenceRoomItem`); a failed or skipped restore leaves it set |
+| Mode 6 (customized clean) | order kept, but rooms with `vacuum_mop_mode == 1` are still moved first | the same, and per-room fan, water and route then apply |
+| Other `0x2B` side effects | none | writes every field of each listed room back, so a wrong read-modify-write corrupts per-room settings |
+| After a firmware update | has to be re-created (it refuses and logs) | still works if the layout didn't change |
+
+Mode 6 ("customized clean", SETTING `0x58` with value 6) applies the stored
+per-room fan, water and route and moves rooms with `vacuum_mop_mode == 1`
+(probably vacuum-only) to the front, so a strict user order isn't possible
+there with either mechanism. Details in
+[room-info.md §4](valetudo-comparison/room-info.md).
+
+An earlier version of this doc rejected the Valetudo approach because the
+`SetRoomInfo` packet was unknown. It is known now (SETTING `0x2B`), and the
+Valetudo patch series is maintained here anyway, so both are kept.
+
+## Packaging (`roomorder`)
+
+A separate component, independent of `camstream` and `persistlog`. Install
+with `./install.sh roomorder-install <ip>`; `roomorder-status` and
+`roomorder-uninstall` are the other two actions.
+
+Files: `/userdata/roomorder/roomorder.sh` (from `robot/roomorder.sh`),
+`/userdata/roomorder/manager_node` (patched copy), one marked line
+(`# j15-roomorder`) in `/oem/_root_postboot.sh`, log in `/tmp/roomorder.log`.
+The vendor binary is **not** shipped; the patched copy is made on the robot.
+
+Install:
+1. Preflight: aarch64, `/usr/navi/manager_node` and `/usr/bin/track` exist,
+   vendor debug mode (`/oem/midea_autorun`) is off.
+2. `roomorder.sh prepare` on the robot: refuse unless the sha256 of
+   `/usr/navi/manager_node` is exactly the one above, the 4 bytes at file
+   offset `0x47d8e8` are `60 07 00 34`, and at least 20 MB are free. Then
+   `cp`, write the 4 bytes with
+   `printf '\037\040\003\325' | dd bs=1 seek=$((0x47d8e8)) conv=notrunc`,
+   check the bytes and the patched sha256, and `mv` into place.
+3. Add the boot line.
+4. `roomorder.sh apply`: `mount --bind`, check the mounted file's sha256,
+   restart `manager_node` (below). If the restart fails, unmount again.
+
+At every boot the same `apply` runs: it re-checks the stock sha256 (firmware
+updated: skip and log), re-checks the patched copy's sha256, mounts if not
+mounted, and restarts `manager_node` only if the running process isn't
+already using the patched binary (`sha256sum /proc/PID/exe`). It waits until
+the system has been up 90 s so the stack finished booting.
+
+Uninstall: remove the boot line, `umount -l` (lazy, because a running
+`manager_node` keeps the mount busy), restart `manager_node` so the stock
+binary runs, delete `/userdata/roomorder`.
+
+`/usr/navi/manager_node` is a mount target in `/proc/mounts` exactly while
+the patch is active; the patched Valetudo uses that to detect it.
+
+Checked locally only: the `dd` / `printf` write on the dump gives the
+expected sha256 above. busybox 1.27.2 on the robot has `dd` (with `notrunc`),
+`od`, `sha256sum`, `pidof`, `killall`, `mount` and `umount`; not run there yet.
+
+### Restarting `manager_node`
+
+Found by static analysis of `/usr/bin/track` (objdump), `start-dushu`, `stop`
+and `S98_lunch_init`. **Not tested on the robot.**
+
+- `S98_lunch_init` `normal_mode` starts `/usr/bin/track &` and then
+  `/usr/navi/start-dushu` from `cd /usr/navi/`. `start-dushu` runs each node
+  directly (`./manager_node config.ini common-V15Overseas.json manager.json`,
+  `LD_LIBRARY_PATH=../lib`); the nodes detach themselves. There is no
+  per-node supervisor script.
+- `track` loops once per second (`sleep(1)` at `0x4015ac`). Each round it
+  calls a pid-file check (`0x403220`) and a heartbeat check (`0x402f40`).
+- The pid-file check walks a table of 15 entries in `.data` (stride `0x188`:
+  pid file path at +0, restart command at +0x80, cached pid at +0x180):
+  `iot`, `midea`, `slam_navi`, `manager`, `data`, `slam`, `planner`,
+  `voice`, `media`, `detect`, `semantic`, `camera_node`, `rkaiq_3A_server`,
+  `audio_node`, `video_node` (`.pid` files in `/var/run`). `manager_node`
+  itself writes `/var/run/manager.pid` (the path is in its strings).
+- For an existing pid file whose pid is dead (`kill(pid, 0)` fails), `track`
+  logs `%s exit, exec %s to restart it.`, **removes the pid file** and runs
+  the entry's command with `system()`, then waits up to 10 s for the pid file
+  to reappear.
+- The command for **`manager`, `data`, `slam` and `planner` is
+  `cd /usr/navi && ./stop* ; ./start*`**. So the death of `manager_node` (or
+  of any of the other three) makes `track` run `stop` (`killall -9` on every
+  node, `ubusd`, `audio_node`, `video_node`, `midea_watchdog`) and then
+  `start-dushu` again. **`manager_node` can't be restarted alone through
+  `track`; the whole navigation stack restarts.** (`./start*` expands to
+  `start-dushu start-dushu-fact`; `start-dushu` ignores its arguments.)
+- The other entries have an empty command; `track` rebuilds one from
+  `/proc/PID/cwd` and `/proc/PID/cmdline` and runs `(cd CWD; CMDLINE) &`.
+- If `/oem/midea_autorun` exists (vendor debug mode) `track` logs
+  `debug mode, not restart.` and does nothing.
+- The heartbeat check works on a 64-entry shared-memory table (shm key
+  `0x1306e7b`, `0x168` bytes per entry, filled by the nodes): on a dead pid or
+  a hang timeout it sends `SIGKILL` and runs that entry's own registered
+  command. Not decoded further.
+- Nothing in the scripts reboots the robot when a node dies.
+- The restart runs in `track`'s process, which has the global mount
+  namespace, so the new `manager_node` starts from `/usr/navi/manager_node`,
+  i.e. the bind-mounted patched file.
+
+Design from that:
+- **Kill `manager_node` and let `track` restart everything.** Starting it by
+  hand with the `start-dushu` command line would not help: `track` reacts to
+  the death within a second anyway and starts the whole stack, so a manual
+  start only creates a duplicate.
+- Mount first, then kill (`SIGKILL`; `track` removes the stale pid file).
+- Wait up to 240 s for a `manager_node` with a new pid that runs from a file
+  with the wanted sha256 (`/proc/PID/exe`).
+- Skip the restart in vendor debug mode (`track` won't do it).
+- When restoring, unmount lazily (`umount -l`) *before* killing, so the
+  restarted process finds the stock file.
+
+Uncertainties:
+- Whether the nodes write their pid files fast enough after `start-dushu`
+  returns for `track` not to run the restart a second time. Worst case is one
+  extra full restart.
+- How long the full restart takes. A running clean doesn't survive it (all
+  nodes are killed), so don't install or uninstall during a clean.
+- Whether Valetudo copes with the nodes restarting under it. `iot_node*` and
+  `midea_robot` aren't in `stop`, so it probably reconnects by itself.
+- A reboot restarts the stack once more, because the boot hook only runs
+  after `start-dushu` (nothing earlier on this firmware is writable).
 
 ## Verification
 
