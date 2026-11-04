@@ -125,6 +125,13 @@ b = read(0x81a1f8, 13 * 8)  # MopStretchState map, 13 pairs
 print([struct.unpack_from("<ii", b, i * 8) for i in range(13)])
 ```
 
+**Check the shared libraries too.** Much of the behaviour lives in
+`/usr/lib/lib*.so`, not in the `*_node` binary (`planner_node` links
+`libmotion.so`, `liblocal_planning.so`, `libzone_*.so`, ...). A singleton
+defined in the executable, such as `MotionConfig`, is reached from a
+library through a GOT slot (`adrp`/`ldr`), not with `adrp`/`add`. Searching
+the executable for its readers then finds only the writers.
+
 **Analysing logs over time.** glog lines are
 `<I|W|E|F>MMDD HH:MM:SS.micro <tid>] [<TAG>] Class::Func - message`. There's
 no year, and rotated `.gz` files are often truncated (read as much as
@@ -141,6 +148,8 @@ Addresses in these docs are for these exact builds:
 | `/usr/navi/planner_node` | `8a3785620d62c74676b38f30b695da1eb616b61513a0a8f51f23458301c47669` |
 | `/usr/navi/data_node` | `18cdaf1f01b2d98d99579bda89bfe1e73ee97a0d9bb300570a68f255f355c58e` |
 | `/usr/navi/manager_node` | `049e9d56d2c0dee98209871deb74fa31006b3bcd730e8b8abaf2d072215b50da` |
+| `/usr/lib/libmotion.so` | `729c0c536dd8831886d1a5d1d35beff1eef8cb4c76f827fe5480ffee16c7f5f9` |
+| `/usr/navi/planner.json` | `27e9338adeca810347c3f5567b1eb684c3ccee77215345d3fbd157ed93d229ec` |
 | `/usr/lib/libsample_plugin.so` | `5b3fbca5d8421e71cdf0ffe893587ce089f7970507eacf97abfa0276d66480f1` |
 
 Check with `sha256sum` on the robot before trusting any address.

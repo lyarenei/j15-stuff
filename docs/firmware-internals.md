@@ -204,6 +204,15 @@ come first, the rest follow the firmware's proximity ranking. `planner_node`
 then cleans in the order it receives. Details and the planned patch are in
 [room-order-investigation.md](room-order-investigation.md).
 
+## Corner and edge cleaning
+
+Wall following and its corner routines are in `/usr/lib/libmotion.so`,
+controlled by `planner.json` `wall_follow.common` flags. Some of those can
+be overridden at runtime with MSmart `SET_VARIOUS_TOGGLES` (`0x9C`):
+`0x31` edge deep vacuum (Valetudo's "Collision-avoidant navigation"),
+`0x26` mop extension, `0x2e` gap, `0x2f` furniture legs. Details are in
+[corner-cleaning-investigation.md](corner-cleaning-investigation.md).
+
 ## Dock water tanks
 
 The dock reports only binary tank states over BLE (`sensor_status` bits:
