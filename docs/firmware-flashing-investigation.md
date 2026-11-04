@@ -304,10 +304,15 @@ Read in MaskROM after `rkdeveloptool db` of Radxa's
   printed 100% and produced a 0x1ff80000-byte file, but everything from
   `0x2000000` (sector `0x10000`) on is `0xcc` filler. The first 32 MiB
   (GPT, IDBs, vnvm, uboot, misc, license, recovery, start of boot) match the
-  Linux `nanddump`s exactly. [C] Cause not known yet: a 32 MiB access limit
-  in this usbplug's raw SLC NAND mode, or a silent transfer error in
-  `rkdeveloptool`. Until it's resolved, **the USB image isn't a restore
-  point past 32 MiB**: rootfs and userdata backups have to come from Linux
+  Linux `nanddump`s exactly. [C]
+- **The limit is on a command's start sector, not on the address.** A
+  single `rl 0xfff0 0x20` returns real data past `0x2000000` (matches
+  `mtd5.bin`), while `rl 0x10000 0x100` and `rl 0x15800 0x100` (rootfs)
+  return only `0xcc`. [C] `rkdeveloptool rl` splits long reads into many
+  commands, so every chunk starting at or past sector `0x10000` fails
+  silently. One command can't go much further either (the rockusb length
+  field is 16-bit, about 32 MiB), so with this loader **the USB image isn't
+  a restore point past ~32–64 MiB**: rootfs and userdata backups have to come from Linux
   (`nanddump`, `/dev/ubiblock0_0`, tar of `/oem`). The brick-critical region
   is inside the 32 MiB, so U-Boot and IDB restores over USB are unaffected.
 
@@ -427,8 +432,9 @@ recovery self-healing.
   short point on the main board.
 - Done 2026-11-04: MaskROM from Linux, unsigned loader accepted, IDBlock
   read and decoded (unsigned).
-- Find out why USB reads stop at 32 MiB (short reads across the boundary,
-  `rl 0x10000 0x100`), and whether `wl` has the same limit.
+- Whether `wl` has the same start-sector limit, and whether rkbin's
+  newer generic usbplug (v1.17, e.g. through `xrock`) or U-Boot's own
+  rockusb (currently falls back to the BootROM) reaches the whole chip.
 - Raw `nanddump` of mtd6 and mtd7 from Linux, so the whole chip is backed
   up at the raw level.
 - Confirm rkdeveloptool NAND support on RK356x with a stock loader.
