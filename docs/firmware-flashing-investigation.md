@@ -1,8 +1,8 @@
 # Investigation: reflashing the firmware and brick risk
 
-**Status:** static analysis done, nothing run or flashed on the robot.
-Started 2026-11-04. Open questions and the next (read-only) steps are at the
-end.
+**Status:** static analysis done, plus a read-only dump of mtd0–mtd5
+(2026-11-04, [analysis below](#flash-dump-analysis)). Nothing flashed.
+Started 2026-11-04. Open questions and next steps are at the end.
 
 The question: could the firmware itself (kernel, rootfs, U-Boot) be
 modified, and how easily could a mistake brick the robot **permanently**,
@@ -24,15 +24,17 @@ general Rockchip knowledge not checked on this unit.
 - What can't be undone without **hardware access** (micro-USB in MaskROM,
   or the debug UART): a broken U-Boot, or a kernel/rootfs that boots but
   never reaches ssh/adb.
-- Unknown and decisive for custom bootloaders only: whether Rockchip secure
-  boot is fused. Reflashing **stock** images is fine either way.
+- Rockchip secure boot is **very likely not enabled**: the U-Boot FIT is
+  unsigned (its `signature` node has no value) and still boots, and there's
+  no AVB on boot/recovery. Only a dump of the IDBlock or the UART boot log
+  would prove it. Reflashing **stock** images is fine either way.
 
 | Change | Worst case | Recovery |
 |---|---|---|
 | rootfs (squashfs in UBI) | no ssh/adb | `recovery` partition (stock OTA flow), or UART/MaskROM |
 | boot (kernel + DTB) | kernel doesn't boot | U-Boot still alive → recovery via BCB, UART, or `rockusb` |
 | recovery partition | none while unused | rewritten by the next update |
-| `uboot` partition | no U-Boot | MaskROM over USB only (needs a Rockchip loader; signed if secure boot is fused) |
+| `uboot` partition | no U-Boot | MaskROM over USB only (needs a Rockchip loader; signed only if secure boot is fused, which looks unlikely) |
 | IDBlock (first 2 MiB) | no boot at all | MaskROM only; not writable from Linux anyway |
 | `vnvm`, `license`, `oem` | identity, license, calibration gone | only from a backup |
 | MCU / dock / BLE firmware | motors or dock dead | Linux re-flash if the MCU bootloader answers; otherwise SWD |
@@ -156,11 +158,73 @@ cloud ─▶ iot_node ─(MD5, writes .sha256)─▶ /tmp/midea_ota_socket ─�
   (`dmesg | grep "F1 signature OK" ... > /tmp/apversion`), with zero matches
   in any dmesg dump. Earlier docs overstated it as evidence of signature
   checks.
-- Whether the BootROM checks the loader signature can't be told from the
-  dumps. If it's fused, MaskROM recovery needs a Midea-signed loader and a
-  modified U-Boot won't boot. A dump of the `uboot` partition (strings like
-  `SecureBoot`, FIT `required` signature nodes) or the UART boot log would
-  answer it.
+- The `uboot` dump makes fused secure boot unlikely; see
+  [U-Boot](#uboot-mtd1). If it were fused, MaskROM recovery would need a
+  Midea-signed loader and a modified U-Boot wouldn't boot.
+
+## Flash dump analysis
+
+Read-only `nanddump --bb=padbad` of mtd0–mtd5, `/dev/ubiblock0_0` and a tar
+of `/oem`, taken 2026-11-04 with the commands in
+[Precautions](#precautions-before-any-flash-experiment). Kept off the repo
+(they contain the device identity). Checksums on the robot and locally
+matched. `/proc/mtd` matches the cmdline layout; `/dev/mtdblock0–7` and
+`/dev/mtdNro` exist.
+
+### uboot (mtd1)
+
+- Two identical copies of a FIT image, at `0x0` and `0x200000`; the last
+  2 MiB are erased (`0xff`). [C]
+- FIT description `"FIT Image with ATF/OP-TEE/U-Boot/MCU"`, timestamp
+  2024-05-17. Images: `uboot` (load `0xa00000`), six `atf-*` (BL31),
+  `optee`, `fdt`, each with a SHA-256 hash. The `uboot` hash matches the
+  data. [C]
+- Configuration `conf` (description `rk3568-evb`, `rollback-index = 0`) has
+  a `signature` node (`algo = "sha256,rsa2048"`, `key-name-hint = "dev"`,
+  `sign-images = fdt, firmware, loadables`) **but no `value` property**:
+  the template from Rockchip's build scripts, never actually signed. [C]
+  [I] Rockchip's secure boot chain (BootROM → signed SPL → SPL checks the
+  FIT signature) would reject this FIT, so SPL isn't enforcing signatures,
+  and Midea most likely never fused secure boot. The SPL itself (in the
+  IDBlock) can't be read from Linux to confirm.
+- U-Boot `2017.09-gefea4696-dirty`, built `May 17 2024 15:50:07 +0800`
+  (Rockchip vendor tree). [C]
+- `bootdelay=0`, but strings include `Hit key to stop autoboot('CTRL+C')`
+  and `Hotkey: ctrl+%c`. [I] Rockchip's U-Boot hotkeys work with
+  `bootdelay=0` when a key is held on the UART during boot (in the vendor
+  source: ctrl+c command line, ctrl+d rockusb, ctrl+b BootROM download).
+  Not tested.
+- Download modes: `enter Rockusb!`, `Enter bootrom rockusb...`,
+  `Enter rockusb failed, fallback to bootrom...`, `boot mode: loader`,
+  `rockusb` command. So U-Boot can put the board into rockusb **and** into
+  BootROM MaskROM itself, without shorting anything. [C strings]
+- Its own device tree (FIT `fdt`) has an **`adc-keys` `volumeup-key`** on
+  SARADC channel 0 (`press-threshold-microvolt = 9`, i.e. the channel pulled
+  to ground), marked `u-boot,dm-spl`. That's the Rockchip download/recovery
+  key (`download %skey pressed... entering download mode`). The Linux DT
+  doesn't declare it. [C] Whether SARADC ch0 reaches a pad or button on
+  this board is unknown.
+- `chosen` → `stdout-path = "/serial@fe660000"` (UART2, the same debug
+  UART) and `u-boot,spl-boot-order = dwmmc, sdhci, nandc, sfc`. [C]
+- Also has AVB code (`bootavb`, `androidboot.verifiedbootstate=orange`
+  string), and a `secure_otp@fe3a0000` driver node. [C]
+
+### boot (mtd5) and recovery (mtd4)
+
+- Both are Android boot images v0 (`ANDROID!`), page size 2048, empty
+  cmdline in the header (U-Boot supplies it). `boot`: kernel `0x817a7e`
+  bytes, no ramdisk, second stage `0x26400` (Rockchip resource image, i.e.
+  the DTB). `recovery`: kernel `0x81f5c0`, ramdisk `0x6e2973`, second
+  `0x24600`. [C]
+- **No AVB footer** (`AVBf`) or `AVB0` vbmeta in either, and no vbmeta
+  partition exists, so nothing verifies them. Matches `orange`. [C]
+
+### misc (mtd2) and license (mtd3)
+
+- `misc` is all zero except a leftover path at offset `0x4344`:
+  `/userdata/midea_rk_update_ota.img`. That's the stock OTA image name from
+  an earlier update; the BCB command itself is cleared. [C]
+- `license` is entirely `0xff` (erased). Nothing uses it on this unit. [C]
 
 ## Per-device data
 
@@ -169,7 +233,8 @@ cloud ─▶ iot_node ─(MD5, writes .sha256)─▶ /tmp/midea_ota_socket ─�
   Meizhi/Tuya product ID, UUID and auth key (IDs 12–14). Readers:
   `vendor_storage`, `midea_licrw`, `iot_node*`, `midea_robot`,
   `libmziot.so`. A copy of the license is also at `/oem/midea/device.lic`.
-- **license (mtd3):** no Linux reader found; purpose unknown.
+- **license (mtd3):** no Linux reader found, and the partition is empty
+  (all `0xff`) on the examined unit.
 - **Calibration** lives on `/oem` (`/oem/vendor_conf/` line-laser extrinsics,
   `/oem/slam/`, `/oem/midea/device.type`). IMU calibration is probably on
   the MCU ([I]).
@@ -226,12 +291,22 @@ recovery self-healing.
 
 ## Precautions before any flash experiment
 
-1. Back up, read-only, and keep off the robot:
-   - `nanddump --bb=skipbad -f <file> /dev/mtdN` for mtd0–mtd5
-   - `/dev/ubiblock0_0` (rootfs squashfs) and a file-level tar of `/oem`
-   - `midea_licrw`/`vendor_storage` reads of the vendor IDs
-   Sanitize per [research-workflow.md](research-workflow.md) before keeping
-   anything in `dumps/`.
+1. Back up, read-only, and keep it outside the repo (vnvm holds the MAC,
+   license and keys, so it doesn't belong in `dumps/` either):
+
+   ```sh
+   R="root@<robot-ip>"
+   B=~/j15-backup/$(date +%Y%m%d) && mkdir -p "$B" && cd "$B"
+   ssh $R 'cat /proc/mtd; ls -l /dev/mtd* /dev/ubi*; cat /proc/cmdline; ubinfo -a' > inventory.txt
+   for n in 0 1 2 3 4 5; do ssh $R "nanddump -q --bb=padbad /dev/mtd$n" > mtd$n.bin; done
+   ssh $R 'cat /dev/ubiblock0_0' > rootfs.squashfs
+   ssh $R 'tar -cf - /oem' > oem.tar
+   ssh $R 'for n in 0 1 2 3 4 5; do nanddump -q --bb=padbad /dev/mtd$n | sha256sum; done; sha256sum /dev/ubiblock0_0' > robot.sha256
+   shasum -a 256 mtd?.bin rootfs.squashfs | awk '{print $1}' | diff - <(awk '{print $1}' robot.sha256) && echo "checksums OK"
+   ```
+
+   `padbad` keeps offsets intact across bad blocks, so an image can be
+   written back 1:1.
 2. Never write the IDBlock, `uboot`, `vnvm`, `license` or any OTP.
 3. Leave the recovery partition stock, so the stock update path keeps
    working as a fallback.
@@ -241,13 +316,16 @@ recovery self-healing.
 
 ## Open questions / next steps
 
-- Dump `uboot` (mtd1) read-only and look for secure boot, FIT signature
-  enforcement, `bootdelay`, rockusb support and how it picks recovery.
-- Check `/proc/mtd`, `ls /dev/mtd*`, and whether `reboot loader` brings up a
-  Rockchip USB device on a computer (`rkdeveloptool ld`).
-- Find the UART2 pads and the MaskROM short point on the main board.
+- Done 2026-11-04: `uboot` dump analysed (unsigned FIT, rockusb/BootROM
+  download modes, ADC download key, hotkeys); `/proc/mtd` and `/dev/mtd*`
+  checked.
+- Test whether `reboot loader` brings up a Rockchip USB device on a
+  computer (`rkdeveloptool ld`, expect VID `0x2207`).
+- Find the UART2 pads, SARADC channel 0 (download key) and the MaskROM
+  short point on the main board.
+- Read the IDBlock (in rockusb: `rkdeveloptool rl 0 0x1000 idb.bin`) to see
+  the SPL and confirm secure boot is off.
 - Confirm rkdeveloptool NAND support on RK356x with a stock loader.
-- Find out what reads the `license` partition.
 
 ## Method and binaries
 
@@ -263,3 +341,8 @@ page, Rockchip/Radxa/Pine64 MaskROM docs, 3mdeb's RK3566 secure boot notes.
 | `/usr/bin/updateEngine` | `e6b3113a57134e99ca07ab6e11d336200d57d6c0b2d738f2454a7867edb88e38` |
 | `/usr/bin/recovery` | `bc33af3f15bdccac3cb0ff5120099d51a6e23098514952bbbea80e8de952d09a` |
 | `/usr/bin/midea_ota` | `ccce129ab5c3fcf36f94a6d0e2adce394f34f4fb3c35f63b60038b6fc3aa7804` |
+| `uboot` partition dump (mtd1, 6 MiB) | `59ea6604a400ce3eef8857ed6f30755d3d580f7114e8c7f64c5112f36472cfcb` |
+
+The FIT header and U-Boot DTB were decoded with
+[`tools/fdt2dts.py`](../tools/fdt2dts.py) (FIT is a flattened device tree;
+the DTB sits at FIT `data-position` `0x1d0e00`).
