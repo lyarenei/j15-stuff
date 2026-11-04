@@ -1,7 +1,8 @@
 # Investigation: reflashing the firmware and brick risk
 
-**Status:** static analysis done, plus a read-only dump of mtd0–mtd5
-(2026-11-04, [analysis below](#flash-dump-analysis)). Nothing flashed.
+**Status:** static analysis done, plus read-only dumps of mtd0–mtd5 and,
+over USB in MaskROM, of the first 2 MiB (2026-11-04,
+[analysis below](#flash-dump-analysis)). Nothing flashed.
 Started 2026-11-04. Open questions and next steps are at the end.
 
 The question: could the firmware itself (kernel, rootfs, U-Boot) be
@@ -24,18 +25,24 @@ general Rockchip knowledge not checked on this unit.
 - What can't be undone without **hardware access** (micro-USB in MaskROM,
   or the debug UART): a broken U-Boot, or a kernel/rootfs that boots but
   never reaches ssh/adb.
-- Rockchip secure boot is **very likely not enabled**: the U-Boot FIT is
-  unsigned (its `signature` node has no value) and still boots, and there's
-  no AVB on boot/recovery. Only a dump of the IDBlock or the UART boot log
-  would prove it. Reflashing **stock** images is fine either way.
+- Rockchip secure boot is **not enforced**: the BootROM accepted an
+  unsigned loader over USB, the stock IDBlock (SPL) is itself unsigned, the
+  U-Boot FIT is unsigned, and there's no AVB on boot/recovery. Stock or
+  modified images of any stage boot.
+- **MaskROM is reachable from Linux and works over the micro-USB port**,
+  and the loader reads the NAND at plain flash offsets. So a full raw NAND
+  image can be taken and written back over USB, which makes almost any
+  software brick recoverable, as long as you can still get into MaskROM
+  (from Linux, or by the BootROM itself when the IDBlock is broken).
 
 | Change | Worst case | Recovery |
 |---|---|---|
 | rootfs (squashfs in UBI) | no ssh/adb | `recovery` partition (stock OTA flow), or UART/MaskROM |
 | boot (kernel + DTB) | kernel doesn't boot | U-Boot still alive → recovery via BCB, UART, or `rockusb` |
 | recovery partition | none while unused | rewritten by the next update |
-| `uboot` partition | no U-Boot | MaskROM over USB only (needs a Rockchip loader; signed only if secure boot is fused, which looks unlikely) |
-| IDBlock (first 2 MiB) | no boot at all | MaskROM only; not writable from Linux anyway |
+| `uboot` partition | no U-Boot, IDBlock still valid → BootROM doesn't fall back to MaskROM | MaskROM needs a short or the ADC download key (location unknown) |
+| IDBlock (first 2 MiB) | no boot at all | BootROM falls back to MaskROM by itself → rewrite over USB; not writable from Linux anyway |
+| SPL key burn (signed FIT with `burn-key-hash`) | secure boot fused with your key, irreversible | none; never build signed images |
 | `vnvm`, `license`, `oem` | identity, license, calibration gone | only from a backup |
 | MCU / dock / BLE firmware | motors or dock dead | Linux re-flash if the MCU bootloader answers; otherwise SWD |
 | SoC OTP fuses | irreversible | none; never write them |
@@ -257,6 +264,44 @@ matched. `/proc/mtd` matches the cmdline layout; `/dev/mtdblock0–7` and
 - Also has AVB code (`bootavb`, `androidboot.verifiedbootstate=orange`
   string), and a `secure_otp@fe3a0000` driver node. [C]
 
+### IDBlock region (first 2 MiB, read over USB)
+
+Read in MaskROM after `rkdeveloptool db` of Radxa's
+`rk356x_spl_loader_ddr1056_v1.10.111.bin` (RAM only):
+`rkdeveloptool rl 0 0x1000 idb.bin`. [C]
+
+- **The loader's LBA is the raw flash offset:** `rl 0x1000 0x800` (1 MiB at
+  2 MiB) is byte-identical to the Linux `nanddump` of mtd0 (vnvm). So `rl`
+  and `wl` address the same bytes as the kernel's mtdparts.
+- `rci`: `38 36 35 33 ...` ("3568" reversed; RK3566 reports as RK3568).
+  `rid`: `F8 DC 90 95 46` (same chip as dmesg). `rfi`: 1,047,552 sectors
+  (the last 512 KiB are hidden, [I] the BBT), 128 KiB blocks, 2 KiB pages,
+  16-bit ECC. It names the maker "TOSHIBA", a lookup-table quirk.
+- `ld` still says `Maskrom` after `db`; the usbplug keeps the BootROM's
+  USB ID.
+
+| Block | Offset | Contents |
+|---|---|---|
+| 0 | `0x000000` | **GPT** (protective MBR + `EFI PART`) with the same 8 partitions as the kernel's `mtdparts` (`userdata` ends at `0x1ff7be00`). U-Boot uses it; Linux uses the cmdline |
+| 1–3 | `0x020000` | IDB copy 1 (`RKNS`) |
+| 4–6 | `0x080000` | IDB copy 2, identical to copy 1 |
+| 7–15 | `0x0e0000` | erased |
+
+- `RKNS` header (new IDB format): header size 384, 2 images, `boot_flag =
+  0x1` = **SHA-256 hash, no signature**. Image 0 at `+0x800`, `0xd800`
+  bytes (DDR init: `DDR V1.16 6f71c736ce typ 23/03/02-20:01:48`); image 1
+  at `+0xe000`, `0x3b000` bytes (U-Boot SPL with `rk_nandc_v9` + MTD). Both
+  image hashes match. [C]
+- The SPL reads a secure-OTP "verified-boot" flag (`## Verified-boot: %d`,
+  `Can't read verified-boot flag`) and contains secure-OTP **write**
+  functions (`rk3568_secure_otp_write_2_bytes`). [I] That's Rockchip's
+  key-burn path: a signed FIT with `burn-key-hash` makes the SPL fuse the
+  key hash and turn on secure boot for good. Never boot a signed FIT on
+  this robot.
+- So the brick-critical region is blocks 0–6 (GPT + both IDBs) plus the
+  `uboot` partition. A raw image of the whole NAND (`rl 0 0xffc00`) backs
+  all of it up.
+
 ### boot (mtd5) and recovery (mtd4)
 
 - Both are Android boot images v0 (`ANDROID!`), page size 2048, empty
@@ -371,8 +416,10 @@ recovery self-healing.
   (`rkdeveloptool ld`, expect `Loader`, VID `0x2207`).
 - Find the UART2 pads, SARADC channel 0 (download key) and the MaskROM
   short point on the main board.
-- Read the IDBlock (in rockusb: `rkdeveloptool rl 0 0x1000 idb.bin`) to see
-  the SPL and confirm secure boot is off.
+- Done 2026-11-04: MaskROM from Linux, unsigned loader accepted, IDBlock
+  read and decoded (unsigned).
+- Take a full raw NAND image over USB (`rl 0 0xffc00`, 511.5 MiB) as the
+  ultimate restore point.
 - Confirm rkdeveloptool NAND support on RK356x with a stock loader.
 
 ## Method and binaries
@@ -389,6 +436,7 @@ page, Rockchip/Radxa/Pine64 MaskROM docs, 3mdeb's RK3566 secure boot notes.
 | `/usr/bin/updateEngine` | `e6b3113a57134e99ca07ab6e11d336200d57d6c0b2d738f2454a7867edb88e38` |
 | `/usr/bin/recovery` | `bc33af3f15bdccac3cb0ff5120099d51a6e23098514952bbbea80e8de952d09a` |
 | `/usr/bin/midea_ota` | `ccce129ab5c3fcf36f94a6d0e2adce394f34f4fb3c35f63b60038b6fc3aa7804` |
+| first 2 MiB (GPT + IDB, `rl 0 0x1000`) | `f512e522a9a3459f64ce7f12647a1e6373c260b4b7b271e4d4346ce5ec85f70d` |
 | `uboot` partition dump (mtd1, 6 MiB) | `59ea6604a400ce3eef8857ed6f30755d3d580f7114e8c7f64c5112f36472cfcb` |
 
 The FIT header and U-Boot DTB were decoded with
