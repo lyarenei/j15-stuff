@@ -113,16 +113,39 @@ cloud ─▶ iot_node ─(MD5, writes .sha256)─▶ /tmp/midea_ota_socket ─�
 ### Micro-USB (OTG) [C/I]
 
 - The only enabled USB controller is `dwc3@fcc00000` (`/usbdrd`,
-  `dr_mode = "otg"`), the SoC's OTG port. `adbd` runs on it in device mode
-  (`/usr/bin/switch_adbd.sh`, gated on `/oem/laserconfig.ini`).
+  `dr_mode = "otg"`), the SoC's OTG port. `adbd` runs on it in device mode.
+  Tested 2026-11-04: with a data cable to a Mac the gadget enumerates as
+  VID `0x2207`, vendor "world", product "robot", with an ADB and a CDC ACM
+  interface, `adb devices` lists it, and `/sys/class/udc/*/state` is
+  `configured`. That's with no `/oem/laserconfig.ini`, so that file (checked
+  in `/usr/bin/switch_adbd.sh`) doesn't gate the gadget. A charge-only cable
+  shows nothing at all, not even an unknown device.
 - Valetudo roots this robot through adb on its **micro-USB port** (under a
   cover, no teardown; https://valetudo.cloud/pages/installation/midea/).
   [I] That is the OTG port, which is also the port the RK3566 BootROM uses
   for MaskROM, and U-Boot for `rockusb`. So USB recovery is physically
   reachable without opening the board.
-- `reboot loader` / `reboot bootloader` (magic `0x5242c301` through
-  `/syscon/reboot-mode`) should drop into U-Boot's rockusb mode while Linux
-  still works. [I] Untested. Not useful if Linux is what's broken.
+- The loader magic (`0x5242c301` through `/syscon/reboot-mode`, PMU GRF
+  `0xfdc20000` + `0x200`) should drop into U-Boot's rockusb mode while
+  Linux still works. Not useful if Linux is what's broken.
+- **`reboot loader` doesn't do that on this firmware.** Tested 2026-11-04:
+  the robot just rebooted into Linux. [C] Neither stock tool passes the
+  argument to the kernel:
+  - `/sbin/reboot` is BusyBox v1.27.2, whose `reboot` takes no reboot
+    argument.
+  - `adbd`'s reboot service (@`0x40de30`) either runs
+    `system("reboot loader")` (BusyBox again) or calls its `android_reboot`
+    (@`0x415020`) with `ANDROID_RB_RESTART` (`0xdead0001`), which is plain
+    `reboot(0x01234567)`. The `RESTART2` branch that would pass the string
+    (syscall 142, @`0x415134`) is never taken. So `adb reboot loader` fails
+    the same way.
+  - What works [I, pending test]: `reboot(2)` with
+    `LINUX_REBOOT_CMD_RESTART2` and `"loader"`. A 15-line static helper
+    (`syscall(SYS_reboot, LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
+    LINUX_REBOOT_CMD_RESTART2, argv[1])` after `sync()`, built with
+    `zig cc -target aarch64-linux-musl -static`) does it. Like
+    `reboot -f`, it skips the init shutdown, so only `sync` protects the
+    UBIFS volumes; run it with the robot idle.
 - Getting into **MaskROM** itself needs the BootROM to find no valid
   IDBlock, which on a working unit means shorting a NAND line or a MaskROM
   pad. The location on this board is unknown.
@@ -319,8 +342,8 @@ recovery self-healing.
 - Done 2026-11-04: `uboot` dump analysed (unsigned FIT, rockusb/BootROM
   download modes, ADC download key, hotkeys); `/proc/mtd` and `/dev/mtd*`
   checked.
-- Test whether `reboot loader` brings up a Rockchip USB device on a
-  computer (`rkdeveloptool ld`, expect VID `0x2207`).
+- Test whether `RESTART2 "loader"` brings up U-Boot rockusb on a computer
+  (`rkdeveloptool ld`, expect `Loader`, VID `0x2207`).
 - Find the UART2 pads, SARADC channel 0 (download key) and the MaskROM
   short point on the main board.
 - Read the IDBlock (in rockusb: `rkdeveloptool rl 0 0x1000 idb.bin`) to see
