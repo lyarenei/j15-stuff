@@ -5,7 +5,8 @@
 patches 0029–0031 (sha256 `5e536900…4e28b4`) are installed on the robot
 (2026-11-06). Checked there: the daemon runs on busybox, Valetudo lists
 both tanks as consumables and puts the estimate in the dock tile metaData,
-and a reset from Valetudo's API is applied within seconds. Not yet seen:
+and a reset from Valetudo's API is applied within seconds. The user
+confirmed the Dock panel and Consumables page show the levels. Not yet seen:
 counting during a mopping job. Started 2026-11-04.
 
 ## Goal
