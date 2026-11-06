@@ -31,6 +31,7 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   | [valetudo-comparison.md](docs/valetudo-comparison.md) | where Valetudo's Midea driver and the firmware disagree (labels, enums, error codes, unexposed features) |
   | [firmware-flashing-investigation.md](docs/firmware-flashing-investigation.md) | flash layout, stock update chain, brick risk and recovery paths for reflashing |
   | [corner-cleaning-investigation.md](docs/corner-cleaning-investigation.md) | corner and edge cleaning routines, which switches turn them on |
+  | [obstacle-avoidance-investigation.md](docs/obstacle-avoidance-investigation.md) | why the robot keeps a wide berth around recognised objects (hard-coded 350/400 mm thresholds) |
   | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, what Valetudo exposes, options for level warnings |
   | [valetudo-patches.md](docs/valetudo-patches.md) | how the Valetudo patch series is built, edited, rebased and installed |
   | [persistent-logs.md](docs/persistent-logs.md) | how the firmware rotates logs, and keeping them across reboots |
