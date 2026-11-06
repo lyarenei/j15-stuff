@@ -20,7 +20,7 @@ Each component installs on its own. All are installed from your computer with
 | [tankwatch](docs/tankwatch.md) | Estimates how full the dock's clean and dirty water tanks are (the dock has no level sensors). | No | No | Verified on the robot. Calibration recommended. |
 | [roomorder](docs/roomorder.md) | Firmware patch: cleans selected rooms in the order you selected them. Optional if you use the patched Valetudo. | No | Yes, all nodes | Untested. |
 | [obstaclegap](docs/obstaclegap.md) | Firmware patch: turns away from recognised objects at 270 mm instead of 350 mm, so less floor around them stays uncleaned. | No | Yes, all nodes | Verified on the robot. |
-| [Patched Valetudo](docs/valetudo.md) | A patch series on top of Valetudo 2026.10.0: Midea driver fixes, more settings, ordered room cleaning, tank levels in the UI. | Yes (git, Node.js) | No (restarts Valetudo) | Verified on the robot. |
+| [Patched Valetudo](docs/valetudo.md) | A patch series on top of Valetudo 2026.10.0: Midea driver fixes, more settings, ordered room cleaning, tank levels in the UI. | Yes (git, Node.js) | No (restarts Valetudo) | Runs on the robot; room order and tank levels verified. |
 
 ## Requirements
 

@@ -3,7 +3,9 @@
 A patch series on top of a Valetudo release, built into an aarch64 binary and
 installed over the stock one on the robot. It fixes and extends Valetudo's
 Midea driver without waiting for upstream and without forking the project.
-Status: verified on the robot (patches 0001 to 0031, Valetudo 2026.10.0).
+Status: runs on the robot (Valetudo 2026.10.0, patches 0001 to 0031). Room
+order and the tank levels are verified there; the driver fixes (0001 to 0024)
+come from static analysis and haven't each been tried on the robot.
 
 ## What it fixes and adds
 
