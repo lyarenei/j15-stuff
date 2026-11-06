@@ -113,6 +113,10 @@ refilled or emptied the tank) creates the empty flag file
 `/tmp/tankwatch.reset-clean` or `/tmp/tankwatch.reset-dirty`, which the
 daemon applies within about 2 s. Without the file nothing changes, so a
 restart is needed after installing tankwatch for the consumables to appear.
+`tankwatch-uninstall` renames the file to `state.json.uninstalled`, so after
+the next restart the consumables and tiles are gone; install and uninstall
+print the restart command (`kill $(pidof valetudo)`, the robot starts it
+again) when the patched build is installed.
 The dock tiles pick up the estimate on every state update with a station
 code: while the firmware says ok, they read "~62% left" (clean) or "~26%
 full" (dirty, 100 minus the space left) and turn yellow, making the panel

@@ -53,7 +53,7 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 This modifies a device you own. Each component only adds files
 in `/userdata` and one line in `/oem/_root_postboot.sh`, and its uninstall
 command removes both (persistlog keeps the logs it saved, tankwatch its
-state and calibration log). roomorder and
+calibration log and the renamed state). roomorder and
 obstaclegap also bind-mount a patched `manager_node` / `planner_node` over the
 vendor one at boot; uninstalling unmounts it. The Valetudo
 component has no boot hook; it replaces `/userdata/valetudo` and keeps the
@@ -195,9 +195,16 @@ tank back, the clean one needs a reset by hand after refilling.
 ```sh
 ./install.sh tankwatch-install   <ip> [ssh options]
 ./install.sh tankwatch-status    <ip> [ssh options]   # running? boot hook? state, calibration log
-./install.sh tankwatch-uninstall <ip> [ssh options]   # keeps the state and calibration log
+./install.sh tankwatch-uninstall <ip> [ssh options]   # keeps the calibration log, renames the state
 ssh root@<ip> /userdata/tankwatch.sh reset clean      # after refilling (or: dirty)
 ```
+
+The patched Valetudo shows the estimates on the Dock panel and as consumables,
+but reads the state file only for the lifetime of its process: after install,
+restart it (`ssh root@<ip> 'kill $(pidof valetudo)'`; the robot starts it
+again). Uninstall renames `state.json` to `state.json.uninstalled`, and the
+levels disappear from Valetudo after its next restart. Install does not restore
+the renamed file; it creates a fresh `state.json`.
 
 Constants (capacities, mL per flow unit, ...) are in `/userdata/tankwatch.conf`.
 `tools/tankwatch-replay.sh <log>...` runs data logs through the same model on
