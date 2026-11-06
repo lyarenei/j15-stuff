@@ -2,8 +2,12 @@
 
 **Status:** cause found. Two fixes are packaged: the `roomorder` firmware
 patch (`./install.sh roomorder-install`) and a `cleanSeq` write in the
-patched Valetudo. Both are implemented, **untested on the robot**.
-Started 2026-11-04.
+patched Valetudo. **The Valetudo fix works on the robot:** tested
+2026-11-06, a segment clean of several rooms followed the selected order
+(seen by the user; Valetudo logs nothing about it at INFO level). No
+`roomOrderRestore` was left in the config afterwards, so the old `cleanSeq`
+values were restored. The `roomorder` firmware patch isn't needed for
+Valetudo users and is still untested. Started 2026-11-04.
 
 ## Symptom
 
