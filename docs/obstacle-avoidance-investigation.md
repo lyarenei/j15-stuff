@@ -217,7 +217,26 @@ Mop job, area coverage, about 44 min (15:38–16:22), five planner logs
   episode was already at 223 mm. So the wire rect appeared (or entered the
   −90°…+60° window) only after the robot was inside 400 mm. The cause is late
   detection, not the patch, since level 4 isn't changed.
+- That wire rect (`SlamCostmap2DLayer::_mergeAIRect`, tag at planner
+  (−2.21, 0.975)) was first merged at 16:17:50, the same second as the first
+  trigger. The camera saw the wire only from about 21–25 cm. Location: a wall corner.
 - No weighing scale (type 3) this time.
+
+### Planner coordinates on the Valetudo map
+
+Planner poses (`SetPosVirtualKnock`, `_mergeAIRect`, `slam pose`) are in
+metres, with the SLAM origin at the dock. Valetudo map coordinates are in cm.
+Fitted against this job's Valetudo path (404 of 442 knock poses land on path
+pixels):
+
+```
+valetudo_x = charger_x + 40 + 100 * x
+valetudo_y = charger_y +  5 - 100 * y
+```
+
+The +40/+5 cm offset is probably the gap between the planner origin and
+the charger entity. Planner `grid = [400 + x/0.05, 400 − y/0.05]` (801×801,
+5 cm).
 
 ## Open questions
 
