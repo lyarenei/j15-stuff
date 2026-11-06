@@ -201,8 +201,7 @@ ssh root@<ip> /userdata/tankwatch.sh reset clean      # after refilling (or: dir
 
 The patched Valetudo shows the estimates on the Dock panel and as consumables,
 but reads the state file only for the lifetime of its process: after install,
-restart it (`ssh root@<ip> 'kill $(pidof valetudo)'`; the robot starts it
-again). Uninstall renames `state.json` to `state.json.uninstalled`, and the
+restart it (`./install.sh valetudo-restart <ip>`). Uninstall renames `state.json` to `state.json.uninstalled`, and the
 levels disappear from Valetudo after its next restart. Install does not restore
 the renamed file; it creates a fresh `state.json`.
 
@@ -265,6 +264,7 @@ a clean.
 valetudo/build.sh                                       # → build/valetudo-aarch64
 ./install.sh valetudo-install   <ip> [ssh options]      # backs up the stock binary, disables auto-update
 ./install.sh valetudo-status    <ip> [ssh options]      # running? patched or stock? backup present?
+./install.sh valetudo-restart   <ip> [ssh options]      # restarts Valetudo, keeping its environment and config path
 ./install.sh valetudo-uninstall <ip> [ssh options]      # restores the stock binary
 ```
 

@@ -115,8 +115,8 @@ daemon applies within about 2 s. Without the file nothing changes, so a
 restart is needed after installing tankwatch for the consumables to appear.
 `tankwatch-uninstall` renames the file to `state.json.uninstalled`, so after
 the next restart the consumables and tiles are gone; install and uninstall
-print the restart command (`kill $(pidof valetudo)`, the robot starts it
-again) when the patched build is installed.
+print `./install.sh valetudo-restart <ip>` when the patched build is
+installed; they do not restart Valetudo themselves.
 The dock tiles pick up the estimate on every state update with a station
 code: while the firmware says ok, they read "~62% left" (clean) or "~26%
 full" (dirty, 100 minus the space left) and turn yellow, making the panel
@@ -194,6 +194,7 @@ Check the release notes for changes to the Midea driver first.
 ```sh
 ./install.sh valetudo-install   <ip> [ssh options]
 ./install.sh valetudo-status    <ip> [ssh options]
+./install.sh valetudo-restart   <ip> [ssh options]
 ./install.sh valetudo-uninstall <ip> [ssh options]
 ```
 
@@ -214,6 +215,9 @@ Check the release notes for changes to the Midea driver first.
 that disabled it, restarts and deletes the backup. `valetudo-status`
 shows whether Valetudo runs, the binary's sha256, whether it matches the
 backup (stock) or not (patched), and whether the updater is on.
+`valetudo-restart` captures the running environment, stops Valetudo and
+starts it again (the robot does not supervise it, so the installer starts it
+by hand if needed), keeping the `VALETUDO_*` variables and config path.
 
 Unlike the other components there is no boot hook. The binary replaces the
 stock one in place, and the robot starts it as it always did. State is in

@@ -253,8 +253,9 @@ The totals are read back from it at start, so they survive reboots.
 Valetudo, which registers the tank consumables only if `state.json` exists at
 its start, no longer shows frozen levels; they disappear after Valetudo's next
 restart. `tankwatch-install` creates a fresh `state.json` when there is none
-and does not restore the renamed file. Both actions print the restart command
-when the installed Valetudo is the patched build.
+and does not restore the renamed file. Both actions print
+`./install.sh valetudo-restart <ip>` when the installed Valetudo is the patched
+build; they do not restart it themselves.
 
 ### Model
 
