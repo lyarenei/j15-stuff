@@ -10,3 +10,6 @@
 *.bin
 dumps/
 log/
+
+# The generated Wi-Fi heatmap contains the floor plan.
+wifimap*.html
