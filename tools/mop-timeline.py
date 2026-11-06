@@ -8,7 +8,7 @@ Inputs can be log files (.log or .log.gz), directories containing them, or a
     tools/mop-timeline.py logs.tar --around "1104 10:12" --window 3
     tools/mop-timeline.py userdata/logs/app/planner --errors
 
-See docs/mop-lift-investigation.md for what the messages mean.
+See https://github.com/lyarenei/j15-stuff/wiki/mop-lift-investigation for what the messages mean.
 """
 
 import argparse

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs on the robot. Keeps a patched copy of manager_node bind-mounted over
 # /usr/navi/manager_node, so a room clean follows the selected order
-# (see docs/room-order-investigation.md). Started at boot from
+# (see https://github.com/lyarenei/j15-stuff/wiki/room-order-investigation). Started at boot from
 # /oem/_root_postboot.sh by install.sh.
 #
 #   roomorder.sh [apply]   mount the patched copy, restart manager_node (default, boot)
@@ -11,7 +11,7 @@
 #
 # manager_node is not started by hand. /usr/bin/track watches it, and when it
 # dies, runs "cd /usr/navi && ./stop* ; ./start*", which restarts ALL nodes
-# (docs/modifying-firmware.md). So a restart here means: kill manager_node and
+# (https://github.com/lyarenei/j15-stuff/wiki/modifying-firmware). So a restart here means: kill manager_node and
 # wait for track to bring the whole stack back.
 
 # The stock busybox has wc as an applet but no link for it.

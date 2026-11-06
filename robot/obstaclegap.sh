@@ -2,7 +2,7 @@
 # Runs on the robot. Keeps a patched copy of planner_node bind-mounted over
 # /usr/navi/planner_node, so the robot turns away from recognised objects
 # (shoes, scales, bins, ...) at 270 mm from its centre instead of 350 mm
-# (see docs/obstacle-avoidance-investigation.md). Wires and feces keep 400 mm.
+# (see https://github.com/lyarenei/j15-stuff/wiki/obstacle-avoidance-investigation). Wires and feces keep 400 mm.
 # Started at boot from /oem/_root_postboot.sh by install.sh.
 #
 #   obstaclegap.sh [apply]   mount the patched copy, restart planner_node (default, boot)
@@ -12,7 +12,7 @@
 #
 # planner_node is not started by hand. /usr/bin/track watches it, and when it
 # dies, runs "cd /usr/navi && ./stop* ; ./start*", which restarts ALL nodes
-# (docs/modifying-firmware.md). So a restart here means: kill planner_node and
+# (https://github.com/lyarenei/j15-stuff/wiki/modifying-firmware). So a restart here means: kill planner_node and
 # wait for track to bring the whole stack back.
 
 # The stock busybox has these as applets but no links for them.
