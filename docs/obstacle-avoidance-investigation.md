@@ -1,7 +1,8 @@
 # Investigation: wide berth around obstacles
 
 **Status:** cause found (static analysis and logs from one clean, two passes).
-The `obstaclegap` patch is built, but not installed on the robot yet. Started 2026-11-06.
+The `obstaclegap` patch is installed on the robot (2026-11-06, while it was docked;
+all nodes came back). No clean with it has been checked yet. Started 2026-11-06.
 
 ## Symptom
 
