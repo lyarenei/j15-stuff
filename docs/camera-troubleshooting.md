@@ -1,9 +1,10 @@
 # Camera troubleshooting
 
-Symptom on the unit examined: the camera view in the Midea app crashed the
-app. The cause was hardware: the camera's ribbon cable had come loose.
-Everything above the sensor (driver, ISP, `video_node`, app) was failing
-because no frames ever arrived.
+Typical symptom: the camera view in the Midea app crashes the app, or
+[camstream](camstream.md) connects but shows nothing. A known cause is
+hardware: the camera's ribbon cable has come loose. Everything above the
+sensor (driver, ISP, `video_node`, app) then fails because no frames ever
+arrive.
 
 ## Quick check
 
@@ -85,7 +86,7 @@ In order of likelihood:
    the front camera module to the main board. Check the connector latches,
    look for corrosion or creases, and reseat both ends. Tape over the latch
    (Kapton tape works well) so bumper knocks don't shake it loose again. This
-   was the fix on the unit examined.
+   fixed the case that led to this guide.
 2. **Dead camera module.** Replace it with an identical one: SC035HGS,
    1-lane MIPI, I2C `0x30`. The firmware has tuning data only for the SC035HGS.
 3. **A main board fault**, such as a regulator or clock. This is unlikely if
