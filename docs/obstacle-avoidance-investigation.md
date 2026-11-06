@@ -2,7 +2,8 @@
 
 **Status:** cause found (static analysis and logs from one clean, two passes).
 The `obstaclegap` patch is installed on the robot (2026-11-06, while it was docked;
-all nodes came back). No clean with it has been checked yet. Started 2026-11-06.
+all nodes came back), and the first clean with it confirms the new 270 mm threshold
+(see "First clean with obstaclegap"). Started 2026-11-06.
 
 ## Symptom
 
@@ -192,6 +193,31 @@ Trade-off: these objects get avoided because the robot shouldn't touch them
 (wires, feces, scales it could climb). A lower threshold gives it less room to
 stop and turn. The first test should lower only levels 2 and 3, leave level 4,
 and watch wires and shoes.
+
+## First clean with `obstaclegap` (2026-11-06)
+
+Mop job, area coverage, about 44 min (15:38–16:22), five planner logs
+(≈ 84 k lines). Patch installed at 15:22 while docked.
+
+| Type | Object | Level | Lines | `dis` range (mm) | Threshold |
+|---|---|---|---|---|---|
+| 1 | trash can | 2 | 354 | 215–**269** | 270 (was 350) |
+| 6 | electric wire | 4 | 729 | 209–**399** | 400 (unchanged) |
+
+- The type-1 maximum is now 269, just under the patched 270 (before the patch:
+  326–349). The planner reads the patched table, so the turn-away happens
+  8 cm later.
+- Every type-1 trigger falls in the `CrossObsByAI` circling episodes (15:32,
+  16:16; `predictradius = 0.4`). That's where the values below 250 come from,
+  as on the second pass of the earlier clean.
+- The 113 wire triggers below 300 mm all come from one moment
+  (16:17:50–16:17:52, 209–223 mm). The robot was on a zigzag line. The lidar
+  virtual bumper (source 1, ≈ 219–234 mm) had stopped it, and it was turning
+  in place at about (−2.21, 0.76). The very first wire trigger of that
+  episode was already at 223 mm. So the wire rect appeared (or entered the
+  −90°…+60° window) only after the robot was inside 400 mm. The cause is late
+  detection, not the patch, since level 4 isn't changed.
+- No weighing scale (type 3) this time.
 
 ## Open questions
 
