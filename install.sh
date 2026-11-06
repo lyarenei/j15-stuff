@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs camstream, persistlog, roomorder, obstaclegap and a patched Valetudo on a rooted Midea J15 over SSH. Run from your computer.
+# Installs camstream, persistlog, tankwatch, wifimap, roomorder, obstaclegap and a patched Valetudo on a rooted Midea J15 over SSH. Run from your computer.
 #
 #   ./install.sh install   <robot-ip> [ssh options]   copy files, add boot hook, start
 #   ./install.sh uninstall <robot-ip> [ssh options]   stop, remove files and boot hook
@@ -13,6 +13,9 @@
 #   ./install.sh tankwatch-install    <robot-ip> [ssh options]  estimate the dock's water tank levels
 #   ./install.sh tankwatch-uninstall  <robot-ip> [ssh options]  stop and remove (state and calibration log are kept)
 #   ./install.sh tankwatch-status     <robot-ip> [ssh options]  show state and recent log
+#   ./install.sh wifimap-install      <robot-ip> [ssh options]  record Wi-Fi signal strength by position while cleaning
+#   ./install.sh wifimap-uninstall    <robot-ip> [ssh options]  stop and remove (recorded samples are kept)
+#   ./install.sh wifimap-status       <robot-ip> [ssh options]  show recorded jobs and the current signal
 #   ./install.sh roomorder-install    <robot-ip> [ssh options]  clean rooms in the selected order (patches manager_node)
 #   ./install.sh roomorder-uninstall  <robot-ip> [ssh options]  restore the stock manager_node
 #   ./install.sh roomorder-status     <robot-ip> [ssh options]  show whether the patch is active
@@ -34,11 +37,12 @@ HOOK=/oem/_root_postboot.sh
 MARKER="# j15-camstream"
 PL_MARKER="# j15-persistlog"
 TW_MARKER="# j15-tankwatch"
+WM_MARKER="# j15-wifimap"
 RO_MARKER="# j15-roomorder"
 OG_MARKER="# j15-obstaclegap"
 
 usage() {
-    sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -113,6 +117,23 @@ if [ -f /tmp/tankwatch.pid ]; then
         i=$((i + 1))
     done
     rm -f /tmp/tankwatch.pid
+fi
+true
+EOF
+}
+
+stop_wifimap() {
+    remote 'sh -s' <<'EOF'
+if [ -f /tmp/wifimap.pid ]; then
+    pid=$(cat /tmp/wifimap.pid)
+    kill "$pid" 2>/dev/null
+    # It closes the job file on TERM; wait for that so a new instance doesn't overlap.
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ $i -lt 30 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    rm -f /tmp/wifimap.pid
 fi
 true
 EOF
@@ -387,6 +408,61 @@ echo "--- calibration log ---"
 tail -n 10 /userdata/tankwatch/calibration.log 2>/dev/null || echo "(none yet)"
 echo "--- last log lines ---"
 tail -n 10 /tmp/tankwatch.log 2>/dev/null || echo "(no log)"
+EOF
+    ;;
+wifimap-install)
+    remote 'sh -s' <<'EOF'
+err() { echo "  error: $*" >&2; exit 1; }
+[ "$(uname -m)" = aarch64 ] || err "unexpected architecture $(uname -m)"
+[ -d /userdata ] || err "/userdata missing"
+[ -e /proc/net/wireless ] || err "/proc/net/wireless missing"
+EOF
+    stop_wifimap
+    echo "Copying files..."
+    push "$HERE/robot/wifimap.sh" /userdata/wifimap.sh 755
+    push "$HERE/robot/wifimap.awk" /userdata/wifimap.awk 644
+    if remote '[ -f /userdata/wifimap.conf ]'; then
+        echo "  keeping existing /userdata/wifimap.conf"
+    else
+        push "$HERE/robot/wifimap.conf" /userdata/wifimap.conf 644
+    fi
+    remote 'mkdir -p /userdata/wifimap'
+    echo "Adding boot hook to $HOOK..."
+    remote "sh -s" <<EOF
+[ -f $HOOK ] || printf '#!/bin/sh\n' > $HOOK
+grep -q '$WM_MARKER\$' $HOOK || echo '/userdata/wifimap.sh >/dev/null 2>&1 &  $WM_MARKER' >> $HOOK
+chmod +x $HOOK
+EOF
+    remote '/userdata/wifimap.sh >/dev/null 2>&1 </dev/null &'
+    echo
+    echo "Installed. Samples are recorded while the robot cleans, into /userdata/wifimap;"
+    echo "see ./install.sh wifimap-status $ROBOT. Draw the heatmap with:"
+    echo "  tools/wifimap.py $ROBOT"
+    ;;
+wifimap-uninstall)
+    stop_wifimap
+    remote "sh -s" <<EOF
+[ -f $HOOK ] && sed -i '/$WM_MARKER\$/d' $HOOK
+rm -rf /userdata/wifimap.sh /userdata/wifimap.awk /userdata/wifimap.conf /tmp/wifimap.*
+true
+EOF
+    echo "Uninstalled. The recorded samples in /userdata/wifimap were kept."
+    echo "Remove them with:  ssh root@$ROBOT rm -rf /userdata/wifimap"
+    ;;
+wifimap-status)
+    remote 'sh -s' <<'EOF'
+if [ -f /tmp/wifimap.pid ] && kill -0 "$(cat /tmp/wifimap.pid)" 2>/dev/null; then
+    echo "wifimap: running (pid $(cat /tmp/wifimap.pid))"
+else
+    echo "wifimap: not running"
+fi
+grep -q 'j15-wifimap$' /oem/_root_postboot.sh 2>/dev/null && echo "boot hook: installed" || echo "boot hook: missing"
+echo "jobs: $(ls /userdata/wifimap/job-*.csv 2>/dev/null | grep -c .) files, $(du -sh /userdata/wifimap 2>/dev/null | cut -f1)"
+newest=$(ls /userdata/wifimap/job-*.csv 2>/dev/null | tail -n 1)
+[ -n "$newest" ] && echo "newest: $newest, last sample: $(tail -n 1 "$newest")"
+echo "signal now: $(grep wlan0: /proc/net/wireless 2>/dev/null | awk '{sub(/\.$/, "", $4); print $4}') dBm"
+echo "--- last log lines ---"
+tail -n 10 /tmp/wifimap.log 2>/dev/null || echo "(no log)"
 EOF
     ;;
 roomorder-install)
