@@ -40,10 +40,10 @@ index e02a4c36..602c135f 100644
                  robot: this,
 diff --git a/backend/lib/robots/midea/MideaTankwatchState.js b/backend/lib/robots/midea/MideaTankwatchState.js
 new file mode 100644
-index 00000000..58982ae2
+index 00000000..7343eedd
 --- /dev/null
 +++ b/backend/lib/robots/midea/MideaTankwatchState.js
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,77 @@
 +const fs = require("node:fs");
 +
 +const STATE_FILE = "/userdata/tankwatch/state.json";
@@ -71,9 +71,6 @@ index 00000000..58982ae2
 +}
 +
 +/**
-+ * Reads the estimate written by the tankwatch daemon. The parsed file is cached until its mtime or size changes.
-+ * Anything unexpected means that there is no estimate.
-+ *
 + * @param {string} [file]
 + * @returns {{clean: {remainingPercent: number, low: boolean}|null, dirty: {remainingPercent: number, low: boolean}|null}|null}
 + */
