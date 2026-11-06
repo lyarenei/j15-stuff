@@ -347,6 +347,22 @@ need a second job to be separated (see Open questions).
    robot, which needs a `manager_node` hook and would also block starts from
    the Valetudo UI. The second is much more invasive.
 
+## Next step: calibration job
+
+After the next mopping job, before touching the tanks:
+
+1. `./install.sh tankwatch-status <robot-ip>` and note the clean and dirty
+   estimates (`used_ml`).
+2. Measure how much water refills the clean tank, and how much is in the
+   dirty tank.
+3. Reset "Clean Water Tank" in Valetudo's Consumables (the dirty tank resets
+   when it's taken out and put back).
+4. Collect logs (`./install.sh collect-logs <robot-ip>`) and, with this job
+   and the 2026-11-06 one, solve for `FLOW_ML_PER_UNIT_S` and
+   `REFILL_ML_PER_S`; check `DIRTY_ML_PER_PUMP_S`. Update
+   `robot/tankwatch.conf` and `/userdata/tankwatch.conf` (the installer keeps
+   an existing one), then restart tankwatch.
+
 ## Open questions
 
 - The unit of `water_pump_flow` (mL/min fits the first job), and how much
