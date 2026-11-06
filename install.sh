@@ -22,6 +22,7 @@
 #   ./install.sh valetudo-install     <robot-ip> [ssh options]  replace Valetudo with build/valetudo-aarch64
 #   ./install.sh valetudo-uninstall   <robot-ip> [ssh options]  restore the stock Valetudo binary
 #   ./install.sh valetudo-status      <robot-ip> [ssh options]  show whether the patched build is installed
+#   ./install.sh valetudo-restart     <robot-ip> [ssh options]  restart Valetudo (keeps its environment and config path)
 #
 # Anything after the robot address is passed to ssh unchanged, e.g.
 #   ./install.sh install 192.168.1.50 -i ~/.ssh/robot -p 2222
@@ -37,7 +38,7 @@ RO_MARKER="# j15-roomorder"
 OG_MARKER="# j15-obstaclegap"
 
 usage() {
-    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -123,9 +124,8 @@ tankwatch_valetudo_note() {
 EOF
     then
         echo
-        echo "The installed Valetudo is the patched build; it $1 after a restart."
-        echo "No installer action only restarts it; the robot starts it again after:"
-        echo "  ssh root@$ROBOT 'kill \$(pidof valetudo)'"
+        echo "The installed Valetudo is the patched build; it $1 after a restart:"
+        echo "  ./install.sh valetudo-restart $ROBOT"
     fi
     return 0
 }
@@ -582,6 +582,15 @@ rm -f /userdata/valetudo.stock "$STATE" /userdata/valetudo.patched.new
 echo "  restored the stock binary"
 EOF
     echo "Uninstalled."
+    ;;
+valetudo-restart)
+    on_robot <<'EOF'
+vt_capture
+vt_stop
+vt_start || exit 1
+true
+EOF
+    echo "Restarted."
     ;;
 valetudo-status)
     on_robot <<'EOF'
