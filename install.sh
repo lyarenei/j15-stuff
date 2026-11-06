@@ -117,6 +117,19 @@ true
 EOF
 }
 
+tankwatch_valetudo_note() {
+    if remote 'sh -s' <<'EOF'
+[ -f /userdata/valetudo.stock ] && [ "$(sha256sum /userdata/valetudo | cut -d' ' -f1)" != "$(sha256sum /userdata/valetudo.stock | cut -d' ' -f1)" ]
+EOF
+    then
+        echo
+        echo "The installed Valetudo is the patched build; it $1 after a restart."
+        echo "No installer action only restarts it; the robot starts it again after:"
+        echo "  ssh root@$ROBOT 'kill \$(pidof valetudo)'"
+    fi
+    return 0
+}
+
 # Shell functions run on the robot. The running Valetudo's VALETUDO_* environment
 # is captured before it is stopped, so a manual start keeps the same config path.
 VT_FUNCS=$(cat <<'EOF'
@@ -345,15 +358,20 @@ EOF
     echo "Installed. The estimates are in /userdata/tankwatch/state.json; see ./install.sh tankwatch-status $ROBOT"
     echo "Assumes the clean tank is full and the dirty tank empty right now; mark them with:"
     echo "  ssh root@$ROBOT /userdata/tankwatch.sh reset clean|dirty"
+    tankwatch_valetudo_note "shows the tank levels"
     ;;
 tankwatch-uninstall)
     stop_tankwatch
     remote "sh -s" <<EOF
 [ -f $HOOK ] && sed -i '/$TW_MARKER\$/d' $HOOK
 rm -rf /userdata/tankwatch.sh /userdata/tankwatch.awk /userdata/tankwatch.conf /tmp/tankwatch.*
+[ -f /userdata/tankwatch/state.json ] && mv /userdata/tankwatch/state.json /userdata/tankwatch/state.json.uninstalled
+true
 EOF
-    echo "Uninstalled. The state and calibration log in /userdata/tankwatch were kept."
+    echo "Uninstalled. The calibration log in /userdata/tankwatch was kept, and the state"
+    echo "was renamed to state.json.uninstalled so that Valetudo stops showing it."
     echo "Remove them with:  ssh root@$ROBOT rm -rf /userdata/tankwatch"
+    tankwatch_valetudo_note "stops showing the tank levels"
     ;;
 tankwatch-status)
     remote 'sh -s' <<'EOF'
