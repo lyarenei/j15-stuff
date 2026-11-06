@@ -1,7 +1,7 @@
 # Investigation: wide berth around obstacles
 
-**Status:** cause found (static analysis and logs from one clean, two passes). Nothing
-built or tested yet. Started 2026-11-06.
+**Status:** cause found (static analysis and logs from one clean, two passes).
+The `obstaclegap` patch is built, but not installed on the robot yet. Started 2026-11-06.
 
 ## Symptom
 
@@ -161,13 +161,31 @@ sides. That leaves roughly 1.5–7.5 cm to the bumper, which matches the
 211–255 mm `dis` values. Circling is the mode that gets close. The
 straight-line turn-away at 350 mm is the one that leaves the gap.
 
-## Possible fix
+## Fix: `obstaclegap`
 
-Patch the level → distance table in a copy of `planner_node` and bind-mount
-it over `/usr/navi/planner_node`, the same way `roomorder` handles
-`manager_node`: a separate component with its own install and uninstall,
-re-applied per firmware version. For example, 350 → 270 and 400 → 320 would
-leave a gap of about 9.5 cm and 14.5 cm.
+`robot/obstaclegap.sh`, installed with `./install.sh obstaclegap-install`.
+It patches the level → distance table in a copy of `planner_node` and
+bind-mounts the copy over `/usr/navi/planner_node`, the same way `roomorder`
+handles `manager_node`.
+
+- Levels 2 and 3 go from 350 → **270 mm**. That's 12 bytes at file offset
+  `0x3e5554` (VA `0x7e5554`): `5e010000 03000000 5e010000` →
+  `0e010000 03000000 0e010000`. Only two bytes actually change.
+- Level 4 stays at 400 mm (electric wire, feces, and the others listed in
+  the summary).
+- Stock sha256 `8a378562…c47669`, patched
+  `b2796930c78ecca413b9fba793a0f1c6cb900d0b77283c5588e7a46d1ead6a38`
+  (checked locally against the dump).
+- `AIMapHelper::Init` copies the table with `add x3, x22, #0x138` /
+  `ldp ... [x3]` / `ldp ... [x3, #0x10]` / `ldr ... [x22, #0x158]`
+  (`0x64e1d8`). Nothing else in the binary reads it as an immediate.
+- **Not changed:** the other `350` immediates in the binary.
+  `LocalMapHelper::CalVirtualBumperObstacles*` passes 350 as the search radius
+  to `LocalMap::GetSlowDownInfo` for every obstacle type. The rest are config
+  defaults (`PlannerConfig`, `WallFollowConfig`, `SpeedCommand`,
+  `MotionConfig`).
+- If `roomorder` is installed as well, each one restarts the nodes once at
+  boot.
 
 Trade-off: these objects get avoided because the robot shouldn't touch them
 (wires, feces, scales it could climb). A lower threshold gives it less room to

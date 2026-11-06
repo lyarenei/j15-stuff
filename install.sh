@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs camstream, persistlog, roomorder and a patched Valetudo on a rooted Midea J15 over SSH. Run from your computer.
+# Installs camstream, persistlog, roomorder, obstaclegap and a patched Valetudo on a rooted Midea J15 over SSH. Run from your computer.
 #
 #   ./install.sh install   <robot-ip> [ssh options]   copy files, add boot hook, start
 #   ./install.sh uninstall <robot-ip> [ssh options]   stop, remove files and boot hook
@@ -13,6 +13,9 @@
 #   ./install.sh roomorder-install    <robot-ip> [ssh options]  clean rooms in the selected order (patches manager_node)
 #   ./install.sh roomorder-uninstall  <robot-ip> [ssh options]  restore the stock manager_node
 #   ./install.sh roomorder-status     <robot-ip> [ssh options]  show whether the patch is active
+#   ./install.sh obstaclegap-install   <robot-ip> [ssh options]  turn away from recognised objects at 270 mm, not 350 (patches planner_node)
+#   ./install.sh obstaclegap-uninstall <robot-ip> [ssh options]  restore the stock planner_node
+#   ./install.sh obstaclegap-status    <robot-ip> [ssh options]  show whether the patch is active
 #   ./install.sh valetudo-install     <robot-ip> [ssh options]  replace Valetudo with build/valetudo-aarch64
 #   ./install.sh valetudo-uninstall   <robot-ip> [ssh options]  restore the stock Valetudo binary
 #   ./install.sh valetudo-status      <robot-ip> [ssh options]  show whether the patched build is installed
@@ -27,9 +30,10 @@ HOOK=/oem/_root_postboot.sh
 MARKER="# j15-camstream"
 PL_MARKER="# j15-persistlog"
 RO_MARKER="# j15-roomorder"
+OG_MARKER="# j15-obstaclegap"
 
 usage() {
-    sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -338,6 +342,60 @@ roomorder-status)
     else
         echo "roomorder: not installed"
         remote 'grep -q " /usr/navi/manager_node " /proc/mounts && echo "warning: /usr/navi/manager_node is mounted over"; grep -q "j15-roomorder\$" /oem/_root_postboot.sh 2>/dev/null && echo "warning: boot hook present"; true'
+    fi
+    ;;
+obstaclegap-install)
+    remote 'sh -s' <<'EOF'
+err() { echo "  error: $*" >&2; exit 1; }
+[ "$(uname -m)" = aarch64 ] || err "unexpected architecture $(uname -m)"
+[ -d /userdata ] || err "/userdata missing"
+[ -e /usr/navi/planner_node ] || err "/usr/navi/planner_node missing (not a Midea J15 firmware?)"
+[ -e /usr/bin/track ] || err "/usr/bin/track missing (not a Midea J15 firmware?)"
+[ -e /oem/midea_autorun ] && err "vendor debug mode is active (/oem/midea_autorun); /usr/bin/track won't restart planner_node then"
+true
+EOF
+    echo "Copying files..."
+    remote 'mkdir -p /userdata/obstaclegap'
+    push "$HERE/robot/obstaclegap.sh" /userdata/obstaclegap/obstaclegap.sh 755
+    echo "Creating the patched copy on the robot (checks the firmware version first)..."
+    remote '/userdata/obstaclegap/obstaclegap.sh prepare' || { echo "Nothing was changed on the running system." >&2; exit 1; }
+    echo "Adding boot hook to $HOOK..."
+    remote "sh -s" <<EOF
+[ -f $HOOK ] || printf '#!/bin/sh\n' > $HOOK
+grep -q '$OG_MARKER\$' $HOOK || echo '/userdata/obstaclegap/obstaclegap.sh >/dev/null 2>&1 &  $OG_MARKER' >> $HOOK
+chmod +x $HOOK
+EOF
+    echo "Applying: this restarts ALL robot nodes (about a minute), don't run it during a clean..."
+    remote '/userdata/obstaclegap/obstaclegap.sh apply </dev/null' || {
+        echo "error: applying failed, see: ./install.sh obstaclegap-status $ROBOT" >&2
+        exit 1
+    }
+    echo
+    echo "Installed. Check with ./install.sh obstaclegap-status $ROBOT"
+    ;;
+obstaclegap-uninstall)
+    remote "sh -s" <<EOF
+[ -f $HOOK ] && sed -i '/$OG_MARKER\$/d' $HOOK
+true
+EOF
+    echo "Restoring the stock planner_node: this restarts ALL robot nodes (about a minute)..."
+    if remote '[ -x /userdata/obstaclegap/obstaclegap.sh ]'; then
+        remote '/userdata/obstaclegap/obstaclegap.sh remove </dev/null' || {
+            echo "error: restore failed; the patched files were kept. See: ./install.sh obstaclegap-status $ROBOT" >&2
+            exit 1
+        }
+    else
+        remote 'while grep -q " /usr/navi/planner_node " /proc/mounts; do umount -l /usr/navi/planner_node || break; done; killall -9 planner_node 2>/dev/null; true'
+    fi
+    remote 'rm -rf /userdata/obstaclegap /tmp/obstaclegap.log /tmp/obstaclegap.log.old'
+    echo "Uninstalled."
+    ;;
+obstaclegap-status)
+    if remote '[ -x /userdata/obstaclegap/obstaclegap.sh ]'; then
+        remote '/userdata/obstaclegap/obstaclegap.sh status'
+    else
+        echo "obstaclegap: not installed"
+        remote 'grep -q " /usr/navi/planner_node " /proc/mounts && echo "warning: /usr/navi/planner_node is mounted over"; grep -q "j15-obstaclegap\$" /oem/_root_postboot.sh 2>/dev/null && echo "warning: boot hook present"; true'
     fi
     ;;
 valetudo-install)

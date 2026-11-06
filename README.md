@@ -14,6 +14,10 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   selected them, by patching 4 bytes in a copy of its `manager_node`
   (bind-mounted over the original). Installed separately; restarts the robot's
   nodes once.
+- **obstaclegap**: makes the robot turn away from recognised objects (shoes,
+  scales, bins, ...) at 270 mm from its centre instead of 350 mm, by patching
+  2 bytes in a copy of its `planner_node`. Wires and feces keep 400 mm.
+  Installed separately; restarts the robot's nodes once.
 - **patched Valetudo**: a patch series on top of a Valetudo release, built
   into an aarch64 binary and installed over the stock one. Installed
   separately; the stock binary is backed up and can be restored.
@@ -45,9 +49,9 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 
 This modifies a device you own. Each component only adds files
 in `/userdata` and one line in `/oem/_root_postboot.sh`, and its uninstall
-command removes both (persistlog keeps the logs it saved). roomorder also
-bind-mounts a patched `manager_node` over the vendor one at boot; uninstalling
-unmounts it. The Valetudo
+command removes both (persistlog keeps the logs it saved). roomorder and
+obstaclegap also bind-mount a patched `manager_node` / `planner_node` over the
+vendor one at boot; uninstalling unmounts it. The Valetudo
 component has no boot hook; it replaces `/userdata/valetudo` and keeps the
 stock binary as `/userdata/valetudo.stock`.
 
@@ -196,6 +200,27 @@ Installing, uninstalling and every boot **restart all the robot's nodes**
 minute). Don't do it during a clean. Not tested on the robot yet. The patched
 Valetudo notices the mount and then doesn't write the clean sequence itself
 (see [docs/valetudo-patches.md](docs/valetudo-patches.md)).
+
+## Obstacle gap
+
+The robot turns away from objects its camera recognises when its centre is
+350 mm from them, which leaves about 17 cm uncleaned around each one (see
+[docs/obstacle-avoidance-investigation.md](docs/obstacle-avoidance-investigation.md)).
+`obstaclegap` lowers that to 270 mm (about 9.5 cm to the bumper). It works
+like `roomorder`: it copies `/usr/navi/planner_node` to `/userdata/obstaclegap`,
+changes the two distances in the copy's level table, and bind-mounts it over
+the original at every boot. Electric wires and feces (400 mm) and circling
+around an object (0.40 m) are unchanged.
+
+```sh
+./install.sh obstaclegap-install   <ip> [ssh options]
+./install.sh obstaclegap-status    <ip> [ssh options]
+./install.sh obstaclegap-uninstall <ip> [ssh options]   # unmounts, restarts planner_node, removes files
+```
+
+Installing, uninstalling and every boot **restart all the robot's nodes**
+(`track` restarts the whole stack when `planner_node` dies). Don't do it during
+a clean.
 
 ## Patched Valetudo
 
