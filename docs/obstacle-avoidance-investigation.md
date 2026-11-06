@@ -88,6 +88,49 @@ runtime or that mapping is off. Not resolved.
   "smart", pet avoidance off, Big Object Recognition on, Edge Deep Vacuum on,
   route "deep".
 
+## Second pass (criss-cross) gets closer
+
+Seen by the user on 2026-11-06 during the same zone clean: the second pass
+went much closer to obstacles. The planner logs split each area into four
+phases. Area 1 starts at 13:36:53, area 2 at 13:53:00, and the horizontal pass
+starts at 13:44:16 and 14:04:47 (`CalCovLineDir - change kVertical to
+kHorizontal`). Every phase has the same avoidance switches (`ai_obs=1`,
+`avoid_ai_obs:1`). The difference is the distance at which an object is first
+reported:
+
+| Phase | Closest AI trigger (mm, centre) |
+|---|---|
+| area 1, vertical, edge walk | 308 |
+| area 1, horizontal, edge walk | 284 |
+| area 2, vertical, edge walk | 273 |
+| area 2, vertical, zigzag | 239 |
+| area 2, horizontal, edge walk | **211** |
+
+The 211 mm approach (14:08:08) came out of this sequence:
+
+1. The robot was in `CrossObsByLineLaser`, edging around an obstacle by line
+   laser. On this path the AI threshold doesn't stop it, and the first AI
+   trigger arrived at 280 mm.
+2. `WFFindwall` switched to **`CrossObsByAI`** ("last bumper is ai
+   virtualbumper, transit to wallfollow ai circular"). It drives a circle of
+   **`predictradius = 0.40` m** around an estimated object centre
+   (`_getAiCircularTraj`, followed by LQR).
+3. Along that circle the robot passed 255 mm and then 221 mm, at −45°, beside
+   the object.
+
+So there are two mechanisms. In a zigzag line the robot turns away at the
+350/400 mm threshold, which is wide. During the edge walk it circles the
+object at 0.40 m from an estimated centre, and when that estimate is off, the
+path runs close. The edge walk doesn't apply the threshold while it crosses by
+line laser. This explains closer approaches during an edge walk. Whether the
+user's "closer" was an edge walk or a zigzag line isn't known yet.
+
+The same type-3 object, was approached over
+and over: 1269 triggers in the first log, ≈ 2500 in the second. No
+`/userdata/aiimgs/3-*.jpg` exists, although every other type that triggered
+has photos. So the planner's `AiType` may **not** use Valetudo's ID numbering.
+That would make the type names in the summary table unreliable.
+
 ## Possible fix
 
 Patch the level → distance table in a copy of `planner_node` and bind-mount
