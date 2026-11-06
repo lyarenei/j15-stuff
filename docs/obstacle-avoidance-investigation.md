@@ -220,6 +220,13 @@ Mop job, area coverage, about 44 min (15:38–16:22), five planner logs
 - That wire rect (`SlamCostmap2DLayer::_mergeAIRect`, tag at planner
   (−2.21, 0.975)) was first merged at 16:17:50, the same second as the first
   trigger. The camera saw the wire only from about 21–25 cm. Location: a wall corner.
+- **False positive.** The user checked: there's no cable or any other object
+  at that corner. The detector scored it 0.85–0.87 on the first frames, and
+  the merged score fell to 0.68. That's above the 0.6 minimum, but it would
+  have passed a higher minimum too. The lidar had already stopped the robot
+  at the wall, so the false wire only changed the turn. Raising the
+  confidence table (`0x7e5568`) wouldn't reliably filter this one out, so
+  it's left alone.
 - No weighing scale (type 3) this time.
 
 ### Planner coordinates on the Valetudo map
