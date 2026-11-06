@@ -10,6 +10,9 @@
 #   ./install.sh persistlog-install   <robot-ip> [ssh options]  keep vendor logs across reboots
 #   ./install.sh persistlog-uninstall <robot-ip> [ssh options]  stop and remove (saved logs are kept)
 #   ./install.sh persistlog-status    <robot-ip> [ssh options]  show state and saved boots
+#   ./install.sh tankwatch-install    <robot-ip> [ssh options]  estimate the dock's water tank levels
+#   ./install.sh tankwatch-uninstall  <robot-ip> [ssh options]  stop and remove (state and calibration log are kept)
+#   ./install.sh tankwatch-status     <robot-ip> [ssh options]  show state and recent log
 #   ./install.sh roomorder-install    <robot-ip> [ssh options]  clean rooms in the selected order (patches manager_node)
 #   ./install.sh roomorder-uninstall  <robot-ip> [ssh options]  restore the stock manager_node
 #   ./install.sh roomorder-status     <robot-ip> [ssh options]  show whether the patch is active
@@ -29,11 +32,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 HOOK=/oem/_root_postboot.sh
 MARKER="# j15-camstream"
 PL_MARKER="# j15-persistlog"
+TW_MARKER="# j15-tankwatch"
 RO_MARKER="# j15-roomorder"
 OG_MARKER="# j15-obstaclegap"
 
 usage() {
-    sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -92,6 +96,23 @@ if [ -f /tmp/persistlog.pid ]; then
     rm -f /tmp/persistlog.pid
 fi
 command -v pkill >/dev/null 2>&1 && pkill -f /userdata/persistlog.sh 2>/dev/null
+true
+EOF
+}
+
+stop_tankwatch() {
+    remote 'sh -s' <<'EOF'
+if [ -f /tmp/tankwatch.pid ]; then
+    pid=$(cat /tmp/tankwatch.pid)
+    kill "$pid" 2>/dev/null
+    # It writes the state on TERM; wait for that so a new instance doesn't overlap.
+    i=0
+    while kill -0 "$pid" 2>/dev/null && [ $i -lt 30 ]; do
+        sleep 1
+        i=$((i + 1))
+    done
+    rm -f /tmp/tankwatch.pid
+fi
 true
 EOF
 }
@@ -288,6 +309,66 @@ echo "store: $(du -sh /userdata/persist-logs 2>/dev/null | cut -f1)"
 ls -d /userdata/persist-logs/boot-* 2>/dev/null
 echo "--- last log lines ---"
 tail -n 10 /tmp/persistlog.log 2>/dev/null || echo "(no log)"
+EOF
+    ;;
+tankwatch-install)
+    remote 'sh -s' <<'EOF'
+err() { echo "  error: $*" >&2; exit 1; }
+[ "$(uname -m)" = aarch64 ] || err "unexpected architecture $(uname -m)"
+[ -d /userdata ] || err "/userdata missing"
+EOF
+    stop_tankwatch
+    echo "Copying files..."
+    push "$HERE/robot/tankwatch.sh" /userdata/tankwatch.sh 755
+    push "$HERE/robot/tankwatch.awk" /userdata/tankwatch.awk 644
+    if remote '[ -f /userdata/tankwatch.conf ]'; then
+        echo "  keeping existing /userdata/tankwatch.conf"
+    else
+        push "$HERE/robot/tankwatch.conf" /userdata/tankwatch.conf 644
+    fi
+    remote "sh -s" <<'EOF'
+mkdir -p /userdata/tankwatch
+if [ ! -f /userdata/tankwatch/state.json ]; then
+    now=$(date +%s)
+    printf '{"version":1,"updated":%s,"clean":{"used_ml":0,"capacity_ml":4000,"remaining_pct":100,"low":false,"reset":%s},"dirty":{"used_ml":0,"capacity_ml":3400,"remaining_pct":100,"low":false,"reset":%s}}\n' \
+        "$now" "$now" "$now" > /userdata/tankwatch/state.json
+fi
+EOF
+    echo "Adding boot hook to $HOOK..."
+    remote "sh -s" <<EOF
+[ -f $HOOK ] || printf '#!/bin/sh\n' > $HOOK
+grep -q '$TW_MARKER\$' $HOOK || echo '/userdata/tankwatch.sh >/dev/null 2>&1 &  $TW_MARKER' >> $HOOK
+chmod +x $HOOK
+EOF
+    remote '/userdata/tankwatch.sh >/dev/null 2>&1 </dev/null &'
+    echo
+    echo "Installed. The estimates are in /userdata/tankwatch/state.json; see ./install.sh tankwatch-status $ROBOT"
+    echo "Assumes the clean tank is full and the dirty tank empty right now; mark them with:"
+    echo "  ssh root@$ROBOT /userdata/tankwatch.sh reset clean|dirty"
+    ;;
+tankwatch-uninstall)
+    stop_tankwatch
+    remote "sh -s" <<EOF
+[ -f $HOOK ] && sed -i '/$TW_MARKER\$/d' $HOOK
+rm -rf /userdata/tankwatch.sh /userdata/tankwatch.awk /userdata/tankwatch.conf /tmp/tankwatch.*
+EOF
+    echo "Uninstalled. The state and calibration log in /userdata/tankwatch were kept."
+    echo "Remove them with:  ssh root@$ROBOT rm -rf /userdata/tankwatch"
+    ;;
+tankwatch-status)
+    remote 'sh -s' <<'EOF'
+if [ -f /tmp/tankwatch.pid ] && kill -0 "$(cat /tmp/tankwatch.pid)" 2>/dev/null; then
+    echo "tankwatch: running (pid $(cat /tmp/tankwatch.pid))"
+else
+    echo "tankwatch: not running"
+fi
+grep -q 'j15-tankwatch$' /oem/_root_postboot.sh 2>/dev/null && echo "boot hook: installed" || echo "boot hook: missing"
+echo "--- state ---"
+cat /userdata/tankwatch/state.json 2>/dev/null || echo "(no state)"
+echo "--- calibration log ---"
+tail -n 10 /userdata/tankwatch/calibration.log 2>/dev/null || echo "(none yet)"
+echo "--- last log lines ---"
+tail -n 10 /tmp/tankwatch.log 2>/dev/null || echo "(no log)"
 EOF
     ;;
 roomorder-install)
