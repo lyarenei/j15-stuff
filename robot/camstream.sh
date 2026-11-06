@@ -2,6 +2,9 @@
 # Runs on the robot. Starts camstream once video_node is up and restarts it
 # if it exits. Started at boot from /oem/_root_postboot.sh by install.sh.
 
+# The stock busybox has wc as an applet but no link for it.
+command -v wc >/dev/null 2>&1 || wc() { busybox wc "$@"; }
+
 CONF=/userdata/camstream.conf
 LOG=/tmp/camstream.log
 BIND=0.0.0.0

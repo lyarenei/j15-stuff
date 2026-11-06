@@ -14,6 +14,9 @@
 # (docs/modifying-firmware.md). So a restart here means: kill manager_node and
 # wait for track to bring the whole stack back.
 
+# The stock busybox has wc as an applet but no link for it.
+command -v wc >/dev/null 2>&1 || wc() { busybox wc "$@"; }
+
 ACTION=${1:-apply}
 DIR=${DIR:-/userdata/roomorder}
 PATCHED=${PATCHED:-$DIR/manager_node}

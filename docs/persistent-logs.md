@@ -1,6 +1,17 @@
 # Persistent logs
 
-**Status:** implemented (`persistlog`), not yet tested on the robot.
+**Status:** implemented (`persistlog`) and working on the robot. Tested
+2026-11-06: after a reboot the boot hook started it, it created `boot-0002`,
+kept `boot-0001`, and saved the previous boot's pstore
+(`console-ramoops-0`). At that point the clock still read 2017-08-04
+(before NTP), as expected.
+
+The first version ran without errors but saved almost nothing: no live
+snapshots, no `dmesg.partial.gz`, and rotated logs were skipped. `wc` and `tr`
+aren't linked on the robot ([hardware.md](hardware.md#useful-tools-already-on-the-robot)),
+so every size came back empty, and two empty sizes compare as equal. Fixed
+by calling the `busybox` applets. After the fix the store had snapshots of
+every app log, plus dmesg and the system logs.
 Investigated 2026-11-04.
 
 ## Goal

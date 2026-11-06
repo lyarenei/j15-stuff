@@ -1,8 +1,17 @@
 # Patched Valetudo
 
-**Status:** tooling implemented, not yet tested on the robot. Written
-2026-11-04. The robot was inoperable at the time, so `valetudo-install`
-has never run against hardware.
+**Status:** installed and running on the robot (2026-11-06). The API reports
+release `2026.10.0`, the robot connected to the dummycloud, the updater is
+disabled, and the stock binary is backed up. The patched features (room order,
+the other protocol fixes) haven't been tried yet. Written 2026-11-04.
+
+The first install attempt failed because `tr` and `nohup` aren't linked on
+the robot ([hardware.md](hardware.md#useful-tools-already-on-the-robot)).
+The old Valetudo was stopped, but the new one couldn't start. Without `tr`,
+the captured environment was also empty, so a manual start would have lost
+`VALETUDO_CONFIG_PATH`. The installer now falls back to `busybox` and adds
+the config path it found. Nothing supervises Valetudo, so the robot never
+restarts it itself; the installer always starts it by hand.
 
 ## Goal
 
@@ -190,8 +199,7 @@ config before the first change).
 
 ## Caveats
 
-- **Untested on the robot.** Check `valetudo-status` and the Valetudo UI
-  after installing. If it doesn't come up, restore with
+- Check `valetudo-status` and the Valetudo UI after installing. If it doesn't come up, restore with
   `valetudo-uninstall`, or copy `/userdata/valetudo.stock` over
   `/userdata/valetudo` by hand.
 - **Automatic updates are disabled** (`updater.enabled=false`). A Valetudo

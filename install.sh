@@ -95,6 +95,10 @@ EOF
 # Shell functions run on the robot. The running Valetudo's VALETUDO_* environment
 # is captured before it is stopped, so a manual start keeps the same config path.
 VT_FUNCS=$(cat <<'EOF'
+# The stock busybox has tr and nohup as applets but no links for them.
+command -v tr >/dev/null 2>&1 || tr() { busybox tr "$@"; }
+NOHUP=nohup
+command -v nohup >/dev/null 2>&1 || NOHUP="busybox nohup"
 VT=/userdata/valetudo
 STATE=/userdata/valetudo.patched
 vt_pid() { pidof valetudo | cut -d' ' -f1; }
@@ -108,6 +112,10 @@ vt_capture() {
             [ -f "$f" ] && CFG=$f && break
         done
     fi
+    # Valetudo wasn't running: start it with the config path it would get at boot.
+    [ -n "$CFG" ] && ! grep -q '^VALETUDO_CONFIG_PATH=' /tmp/valetudo.env \
+        && echo "VALETUDO_CONFIG_PATH=$CFG" >> /tmp/valetudo.env
+    true
 }
 vt_stop() {
     pid=$(vt_pid)
@@ -128,7 +136,7 @@ vt_start() {
     echo "  not restarted by the robot, starting it manually"
     set --
     while IFS= read -r l; do set -- "$@" "$l"; done < /tmp/valetudo.env
-    env ${1+"$@"} nohup "$VT" >/tmp/valetudo.log 2>&1 </dev/null &
+    env ${1+"$@"} $NOHUP "$VT" >/tmp/valetudo.log 2>&1 </dev/null &
     sleep 3
     if [ -n "$(vt_pid)" ]; then echo "  started (pid $(vt_pid))"; else echo "  error: Valetudo did not start, see /tmp/valetudo.log" >&2; return 1; fi
 }

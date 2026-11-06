@@ -3,6 +3,10 @@
 # to persistent storage so they survive reboots. Started at boot from
 # /oem/_root_postboot.sh by install.sh.
 
+# The stock busybox has these as applets but no links for them.
+command -v wc >/dev/null 2>&1 || wc() { busybox wc "$@"; }
+command -v tr >/dev/null 2>&1 || tr() { busybox tr "$@"; }
+
 CONF=${CONF:-/userdata/persistlog.conf}
 LOG=${LOG:-/tmp/persistlog.log}
 LOGS=${LOGS:-/userdata/logs}

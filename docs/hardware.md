@@ -72,6 +72,13 @@ tree nodes. Changes are logged to `dmesg` (`pwm_<name> set level N`):
 `media-ctl`, `v4l2-ctl`, `i2cdetect`, `i2cget`, `i2cset`, `i2ctransfer`,
 `ubus`, BusyBox (with `httpd`, `tcpsvd`, `inetd`), `adbd`, `dropbear`.
 
+Some BusyBox v1.27.2 applets have no link in `$PATH`: **`tr`, `wc`, `nohup`,
+`timeout`, `install`, `sum`, `last`** (found 2026-11-06). Scripts that run on
+the robot must call them as `busybox <applet>`. The robot scripts and
+`install.sh` define a small shell function for each one they use. `pkill` and
+`pgrep` are missing altogether. When a command is missing, `$(wc -c < f)` just
+returns an empty string, so a size check can quietly turn into a no-op.
+
 The factory test binaries in `/usr/bin/rk_pcba_test/` are worth knowing about.
 For example, `echo_camera_check_test` only runs
 `media-ctl -d /dev/media0 -p | grep type` and looks for a `Sensor` entity.
