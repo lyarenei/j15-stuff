@@ -4,6 +4,8 @@
 release `2026.10.0`, the robot connected to the dummycloud, the updater is
 disabled, and the stock binary is backed up. The patched features (room order,
 the other protocol fixes) haven't been tried yet. Written 2026-11-04.
+The build with 0001–0031 was installed on 2026-11-06; the tankwatch
+consumables, dock tile metaData and consumable reset work on the robot.
 
 The first install attempt failed because `tr` and `nohup` aren't linked on
 the robot ([hardware.md](hardware.md#useful-tools-already-on-the-robot)).

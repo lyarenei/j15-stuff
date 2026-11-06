@@ -1,8 +1,12 @@
 # Investigation: dock water tank monitoring
 
-**Status:** measured on a real mopping job (2026-11-06); the estimator,
-`tankwatch`, is built (see [tankwatch](#tankwatch)) but not yet installed or
-tested on the robot. Started 2026-11-04.
+**Status:** measured on a real mopping job (2026-11-06). The estimator,
+`tankwatch` (see [tankwatch](#tankwatch)), and the Valetudo build with
+patches 0029–0031 (sha256 `5e536900…4e28b4`) are installed on the robot
+(2026-11-06). Checked there: the daemon runs on busybox, Valetudo lists
+both tanks as consumables and puts the estimate in the dock tile metaData,
+and a reset from Valetudo's API is applied within seconds. Not yet seen:
+counting during a mopping job. Started 2026-11-04.
 
 ## Goal
 
