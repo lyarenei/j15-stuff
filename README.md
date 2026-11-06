@@ -10,6 +10,9 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   (dead sensor, loose cable, driver, capture).
 - **persistlog**: keeps the robot's logs across reboots (the firmware keeps
   them in RAM, and only about a day's worth). Installed separately.
+- **tankwatch**: estimates how full the dock's clean and dirty water tanks
+  are (the dock has no level sensors) by following the robot's logs, and
+  keeps the result in `/userdata/tankwatch/state.json`. Installed separately.
 - **roomorder**: makes the robot clean selected rooms in the order you
   selected them, by patching 4 bytes in a copy of its `manager_node`
   (bind-mounted over the original). Installed separately; restarts the robot's
@@ -36,7 +39,7 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
   | [firmware-flashing-investigation.md](docs/firmware-flashing-investigation.md) | flash layout, stock update chain, brick risk and recovery paths for reflashing |
   | [corner-cleaning-investigation.md](docs/corner-cleaning-investigation.md) | corner and edge cleaning routines, which switches turn them on |
   | [obstacle-avoidance-investigation.md](docs/obstacle-avoidance-investigation.md) | why the robot keeps a wide berth around recognised objects (hard-coded 350/400 mm thresholds) |
-  | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, water use measured on a real job, options for level warnings |
+  | [water-tank-investigation.md](docs/water-tank-investigation.md) | dock tank sensors, water use measured on a real job, the tankwatch level estimator |
   | [valetudo-patches.md](docs/valetudo-patches.md) | how the Valetudo patch series is built, edited, rebased and installed |
   | [persistent-logs.md](docs/persistent-logs.md) | how the firmware rotates logs, and keeping them across reboots |
   | [research-workflow.md](docs/research-workflow.md) | how to dump, analyse and reproduce these findings |
@@ -49,7 +52,8 @@ Tools and notes for a rooted **Midea J15 Pro Ultra** robot vacuum running
 
 This modifies a device you own. Each component only adds files
 in `/userdata` and one line in `/oem/_root_postboot.sh`, and its uninstall
-command removes both (persistlog keeps the logs it saved). roomorder and
+command removes both (persistlog keeps the logs it saved, tankwatch its
+state and calibration log). roomorder and
 obstaclegap also bind-mount a patched `manager_node` / `planner_node` over the
 vendor one at boot; uninstalling unmounts it. The Valetudo
 component has no boot hook; it replaces `/userdata/valetudo` and keeps the
@@ -177,6 +181,28 @@ doesn't need camstream and doesn't need a build:
 interval, extra logs) are in `/userdata/persistlog.conf`. Cloud connection
 logs, core dumps and map images are never copied. Details are in
 [docs/persistent-logs.md](docs/persistent-logs.md).
+
+## Water tank levels
+
+The dock has no level sensors, so `tankwatch` estimates them from the water
+the logs say was used: clean water from the supply flow meter and the robot
+refills, dirty water from the dirty pump's running time. It writes
+`/userdata/tankwatch/state.json` (used mL, remaining percent, low flag, time
+of the last reset per tank). It assumes the clean tank is full and the dirty
+tank empty when installed; the dirty counter resets when you put the dirty
+tank back, the clean one needs a reset by hand after refilling.
+
+```sh
+./install.sh tankwatch-install   <ip> [ssh options]
+./install.sh tankwatch-status    <ip> [ssh options]   # running? boot hook? state, calibration log
+./install.sh tankwatch-uninstall <ip> [ssh options]   # keeps the state and calibration log
+ssh root@<ip> /userdata/tankwatch.sh reset clean      # after refilling (or: dirty)
+```
+
+Constants (capacities, mL per flow unit, ...) are in `/userdata/tankwatch.conf`.
+`tools/tankwatch-replay.sh <log>...` runs data logs through the same model on
+your computer. Details are in
+[docs/water-tank-investigation.md](docs/water-tank-investigation.md).
 
 ## Room order
 

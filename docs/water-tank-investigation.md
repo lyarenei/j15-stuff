@@ -1,7 +1,8 @@
 # Investigation: dock water tank monitoring
 
-**Status:** measured on a real mopping job (2026-11-06); estimator design
-pending. Nothing built yet. Started 2026-11-04.
+**Status:** measured on a real mopping job (2026-11-06); the estimator,
+`tankwatch`, is built (see [tankwatch](#tankwatch)) but not yet installed or
+tested on the robot. Started 2026-11-04.
 
 ## Goal
 
@@ -234,6 +235,82 @@ clean tank runs out first (after about 2.5 jobs like this one).
 `is_sewage_installed` (byte 0 bit 2) stayed 1 the whole time. The same bit
 4 toggle also appears at 15:25:06-15:25:32 UTC, just before the job
 started.
+
+## tankwatch
+
+`robot/tankwatch.sh` follows the `data` log (`data.INFO`) and the `manager`
+log with `tail -n 0 -F` and feeds the lines to `robot/tankwatch.awk`, which
+keeps two running totals and writes them to `/userdata/tankwatch/state.json`
+(integers only, written atomically; `version`, `updated`, and per tank
+`used_ml`, `capacity_ml`, `remaining_pct`, `low`, `reset`). The dirty
+tank's `remaining_pct` is the space left. The file is rewritten at the end
+of a pump or refill run, when the flow returns to 0, and after any reset,
+full or empty event, not on every flow change, because it lives on flash.
+The totals are read back from it at start, so they survive reboots.
+
+### Model
+
+```
+clean_used_ml += flow_integral * FLOW_ML_PER_UNIT_S + refill_seconds * REFILL_ML_PER_S
+dirty_used_ml += dirty_pump_seconds * DIRTY_ML_PER_PUMP_S
+```
+
+- `water_pump_flow:A->B` is a step function: the value holds until the next
+  change. Time comes from the log line timestamps (UTC, midnight wrap
+  handled), not from the clock.
+- `supply_water_robot_status` is the robot refill and `pump_station_status`
+  the dirty pump; each counts while its value is 1.
+- A `regiser success` line means `data_node` restarted: running pumps and
+  the flow are treated as stopped.
+
+Constants (`/userdata/tankwatch.conf`, kept across reinstalls), all from
+the single measured job:
+
+| Constant | Value | Source |
+|---|---|---|
+| `CLEAN_CAPACITY_ML` / `DIRTY_CAPACITY_ML` | 4000 / 3400 | tank sizes |
+| `FLOW_ML_PER_UNIT_S` | 0.016667 | `water_pump_flow` read as mL/min: 69,730 unit·s gives 1,162 mL |
+| `REFILL_ML_PER_S` | 3.1 | the remaining ≈ 340 mL of the measured 1.5 L over 110 s of refill; **a fit to one job**, not measured separately |
+| `DIRTY_ML_PER_PUMP_S` | 1.4 | 0.9 L over 645 s of dirty pump |
+| `LOW_PCT` | 20 | `low` is true when `remaining_pct` is below it |
+
+Replaying the job log (`tools/tankwatch-replay.sh log/tank/data-all.log`)
+gives clean ≈ 1,503 mL and dirty ≈ 903 mL, which is what the constants were
+fitted to, so it only checks the parser. The refill and flow terms still
+need a second job to be separated (see Open questions).
+
+### Resets and calibration
+
+- **Dirty tank put back** (`is_sewage_abnormal:1->0`): dirty counter to 0.
+- **Dock says dirty tank full** (`is_sewage_full:0->1`): dirty counter set to
+  the capacity. The estimate before clamping is appended to
+  `/userdata/tankwatch/calibration.log` (timestamp, `dirty_full`,
+  `est_used_ml`), so drift of the constants shows up there.
+- **Clean tank empty**: a manager log line containing `kWaterTankLackWater`
+  sets the clean counter to the capacity and logs `clean_empty` with the
+  estimate the same way, at most once per 10 minutes. **This trigger has
+  never been observed** (no job has run the tank dry); it is implemented
+  from the string seen in the firmware. Strings like
+  `[PLUMB] drain clean water done. status=kWaterTankLackWater` suggest the
+  name may also appear in lines that are not an empty tank, in which case
+  the counter would jump to empty wrongly; check the first real hit.
+- **Manual reset** (clean tank refilled; removing it isn't reported): create
+  `/tmp/tankwatch.reset-clean` or `/tmp/tankwatch.reset-dirty` (that is what
+  Valetudo does), or run `/userdata/tankwatch.sh reset clean|dirty` on the
+  robot. The daemon sets that counter to 0, `reset` to now, deletes the flag
+  and writes the state. The flags are checked on log input at most once a
+  second; the logs are quiet when the robot is idle, so while a flag is
+  pending the daemon feeds itself a line every second.
+
+### Limits
+
+- Events are only seen while the daemon runs. A restart (or a reboot, or a
+  `data_node` crash that happens while the daemon is down) misses whatever
+  the dock did in between, including a tank removal.
+- A pump or refill run that was in progress when the daemon stopped is
+  dropped.
+- `tankwatch.awk` uses only POSIX awk, so the same file runs with the
+  robot's busybox awk and macOS awk.
 
 ## Possible approaches
 
