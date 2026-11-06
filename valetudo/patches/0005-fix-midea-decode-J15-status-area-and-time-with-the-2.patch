@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:19:37 +0100
-Subject: [PATCH 05/28] fix(midea): decode J15 status area and time with the
+Subject: [PATCH 05/31] fix(midea): decode J15 status area and time with the
  255 split
 
 The firmware stores value % 255 in the low byte and value / 255 in the

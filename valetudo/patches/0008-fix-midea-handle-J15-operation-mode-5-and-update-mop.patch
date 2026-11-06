@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:20:57 +0100
-Subject: [PATCH 08/28] fix(midea): handle J15 operation mode 5 and update
+Subject: [PATCH 08/31] fix(midea): handle J15 operation mode 5 and update
  mopMode
 
 The firmware accepts operation mode 5 (AiClean) as well as 0-3. When the

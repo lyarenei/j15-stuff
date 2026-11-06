@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:53:36 +0100
-Subject: [PATCH 27/28] feat(midea): add a helper for ordered room cleanups
+Subject: [PATCH 27/31] feat(midea): add a helper for ordered room cleanups
 
 The firmware cleans the rooms of a segment cleanup sorted by their
 stored cleanSeq. Rooms with cleanSeq 0 follow in the firmware's own

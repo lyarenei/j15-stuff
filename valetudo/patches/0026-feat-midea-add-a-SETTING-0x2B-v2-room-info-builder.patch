@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:52:29 +0100
-Subject: [PATCH 26/28] feat(midea): add a SETTING 0x2B v2 room info builder
+Subject: [PATCH 26/31] feat(midea): add a SETTING 0x2B v2 room info builder
 
 SETTING 0x2B writes the per-room settings, including the clean sequence
 that decides the order of segment cleanups. The existing payload builder

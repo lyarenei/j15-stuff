@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:19:24 +0100
-Subject: [PATCH 22/28] fix(midea): log unknown floor materials at debug level
+Subject: [PATCH 22/31] fix(midea): log unknown floor materials at debug level
 
 The firmware accepts floor materials 0-4, but only 0, 2 and 3 have known
 names. The segment rendering already falls back to generic for the other

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:19:07 +0100
-Subject: [PATCH 21/28] feat(midea): add behaviour quirks
+Subject: [PATCH 21/31] feat(midea): add behaviour quirks
 
 Expose more firmware toggles as quirks on the J15 Pro Ultra: continuous
 cleaning / smart breakpoint clean (0x9C 0x00), child lock follows DND

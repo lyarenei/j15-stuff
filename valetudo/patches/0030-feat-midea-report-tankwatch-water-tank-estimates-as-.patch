@@ -1,0 +1,291 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Fri, 6 Nov 2026 19:04:57 +0100
+Subject: [PATCH 30/31] feat(midea): report tankwatch water tank estimates as
+ consumables
+
+Reads /userdata/tankwatch/state.json (written by the tankwatch daemon on
+the robot) and exposes the clean tank (water left) and the dirty tank
+(space left) as percent consumables. The parsed file is cached by mtime
+and size; a missing, unreadable, malformed or version != 1 file means no
+estimate. Resetting a consumable creates the flag file
+/tmp/tankwatch.reset-clean or /tmp/tankwatch.reset-dirty, which the
+daemon picks up.
+
+The capability is only registered on the J15 Pro Ultra when the state
+file exists at startup.
+
+diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+index e02a4c36..602c135f 100644
+--- a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
+@@ -6,6 +6,7 @@ const Logger = require("../../Logger");
+ const MideaModernValetudoRobot = require("./MideaModernValetudoRobot");
+ const MideaQuirkFactory = require("./MideaQuirkFactory");
+ const MideaRoomOrderHelper = require("./MideaRoomOrderHelper");
++const MideaTankwatchState = require("./MideaTankwatchState");
+ const MissingResourceValetudoEvent = require("../../valetudo_events/events/MissingResourceValetudoEvent");
+ const QuirksCapability = require("../../core/capabilities/QuirksCapability");
+ const {IMAGE_FILE_FORMAT} = require("../../utils/const");
+@@ -103,6 +104,10 @@ class MideaJ15ProUltraValetudoRobot extends MideaModernValetudoRobot {
+             ]
+         }));
+ 
++        if (fs.existsSync(MideaTankwatchState.STATE_FILE)) {
++            this.registerCapability(new capabilities.MideaTankwatchConsumableMonitoringCapability({robot: this}));
++        }
++
+         if (this.config.get("embedded") === true) {
+             this.registerCapability(new LinuxWifiScanCapability({
+                 robot: this,
+diff --git a/backend/lib/robots/midea/MideaTankwatchState.js b/backend/lib/robots/midea/MideaTankwatchState.js
+new file mode 100644
+index 00000000..58982ae2
+--- /dev/null
++++ b/backend/lib/robots/midea/MideaTankwatchState.js
+@@ -0,0 +1,80 @@
++const fs = require("node:fs");
++
++const STATE_FILE = "/userdata/tankwatch/state.json";
++const RESET_FLAG_FILES = Object.freeze({
++    clean: "/tmp/tankwatch.reset-clean",
++    dirty: "/tmp/tankwatch.reset-dirty"
++});
++
++let cache = {key: null, state: null};
++
++/**
++ * @param {*} tank
++ * @returns {{remainingPercent: number, low: boolean}|null}
++ */
++function parseTank(tank) {
++    if (
++        tank === null || typeof tank !== "object" ||
++        !Number.isInteger(tank.remaining_pct) || tank.remaining_pct < 0 || tank.remaining_pct > 100 ||
++        typeof tank.low !== "boolean"
++    ) {
++        return null;
++    }
++
++    return {remainingPercent: tank.remaining_pct, low: tank.low};
++}
++
++/**
++ * Reads the estimate written by the tankwatch daemon. The parsed file is cached until its mtime or size changes.
++ * Anything unexpected means that there is no estimate.
++ *
++ * @param {string} [file]
++ * @returns {{clean: {remainingPercent: number, low: boolean}|null, dirty: {remainingPercent: number, low: boolean}|null}|null}
++ */
++function read(file = STATE_FILE) {
++    let key;
++    try {
++        const stat = fs.statSync(file);
++        key = `${file}:${stat.mtimeMs}:${stat.size}`;
++    } catch (e) {
++        cache = {key: null, state: null};
++        return null;
++    }
++
++    if (cache.key === key) {
++        return cache.state;
++    }
++
++    let state = null;
++    try {
++        const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
++
++        if (parsed !== null && typeof parsed === "object" && parsed.version === 1) {
++            const clean = parseTank(parsed.clean);
++            const dirty = parseTank(parsed.dirty);
++
++            if (clean || dirty) {
++                state = {clean: clean, dirty: dirty};
++            }
++        }
++    } catch (e) {
++        state = null;
++    }
++
++    cache = {key: key, state: state};
++    return state;
++}
++
++/**
++ * @param {"clean"|"dirty"} tank
++ */
++function requestReset(tank) {
++    fs.writeFileSync(RESET_FLAG_FILES[tank], "");
++}
++
++module.exports = {
++    STATE_FILE: STATE_FILE,
++    RESET_FLAG_FILES: RESET_FLAG_FILES,
++    read: read,
++    requestReset: requestReset
++};
+diff --git a/backend/lib/robots/midea/capabilities/MideaTankwatchConsumableMonitoringCapability.js b/backend/lib/robots/midea/capabilities/MideaTankwatchConsumableMonitoringCapability.js
+new file mode 100644
+index 00000000..bbcd2e7c
+--- /dev/null
++++ b/backend/lib/robots/midea/capabilities/MideaTankwatchConsumableMonitoringCapability.js
+@@ -0,0 +1,71 @@
++const ConsumableMonitoringCapability = require("../../../core/capabilities/ConsumableMonitoringCapability");
++const MideaTankwatchState = require("../MideaTankwatchState");
++const ValetudoConsumable = require("../../../entities/core/ValetudoConsumable");
++
++const TANKS = Object.freeze({
++    [ValetudoConsumable.SUB_TYPE.CLEAN]: "clean",
++    [ValetudoConsumable.SUB_TYPE.DIRTY]: "dirty"
++});
++
++/**
++ * @extends ConsumableMonitoringCapability<import("../MideaValetudoRobot")>
++ */
++class MideaTankwatchConsumableMonitoringCapability extends ConsumableMonitoringCapability {
++    /**
++     * @returns {Promise<Array<ValetudoConsumable>>}
++     */
++    async getConsumables() {
++        const state = MideaTankwatchState.read();
++        const consumables = [];
++
++        Object.entries(TANKS).forEach(([subType, tank]) => {
++            const estimate = state?.[tank];
++
++            if (estimate) {
++                consumables.push(new ValetudoConsumable({
++                    type: ValetudoConsumable.TYPE.WATER_TANK,
++                    subType: subType,
++                    remaining: {
++                        value: estimate.remainingPercent,
++                        unit: ValetudoConsumable.UNITS.PERCENT
++                    }
++                }));
++            }
++        });
++
++        this.raiseEventIfRequired(consumables);
++
++        return consumables;
++    }
++
++    /**
++     * @param {string} type
++     * @param {string} [subType]
++     * @returns {Promise<void>}
++     */
++    async resetConsumable(type, subType) {
++        const tank = TANKS[subType];
++
++        if (type !== ValetudoConsumable.TYPE.WATER_TANK || !tank) {
++            throw new Error(`Unknown consumable ${type}, ${subType}`);
++        }
++
++        MideaTankwatchState.requestReset(tank);
++        this.markEventsAsProcessed(type, subType);
++    }
++
++    getProperties() {
++        return {
++            availableConsumables: Object.keys(TANKS).map(subType => {
++                return {
++                    type: ValetudoConsumable.TYPE.WATER_TANK,
++                    subType: subType,
++                    unit: ValetudoConsumable.UNITS.PERCENT,
++                    maxValue: 100
++                };
++            })
++        };
++    }
++}
++
++module.exports = MideaTankwatchConsumableMonitoringCapability;
+diff --git a/backend/lib/robots/midea/capabilities/index.js b/backend/lib/robots/midea/capabilities/index.js
+index ecd959ea..f4bfe0d1 100644
+--- a/backend/lib/robots/midea/capabilities/index.js
++++ b/backend/lib/robots/midea/capabilities/index.js
+@@ -57,6 +57,7 @@ module.exports = {
+     MideaSpeakerTestCapability: require("./MideaSpeakerTestCapability"),
+     MideaSpeakerVolumeControlCapabilityV1: require("./MideaSpeakerVolumeControlCapabilityV1"),
+     MideaSpeakerVolumeControlCapabilityV2: require("./MideaSpeakerVolumeControlCapabilityV2"),
++    MideaTankwatchConsumableMonitoringCapability: require("./MideaTankwatchConsumableMonitoringCapability"),
+     MideaWaterUsageControlCapabilityV1: require("./MideaWaterUsageControlCapabilityV1"),
+     MideaWaterUsageControlCapabilityV2: require("./MideaWaterUsageControlCapabilityV2"),
+     MideaWifiConfigurationCapability: require("./MideaWifiConfigurationCapability"),
+diff --git a/backend/test/lib/robots/midea/MideaTankwatchState_test.js b/backend/test/lib/robots/midea/MideaTankwatchState_test.js
+new file mode 100644
+index 00000000..30a315c4
+--- /dev/null
++++ b/backend/test/lib/robots/midea/MideaTankwatchState_test.js
+@@ -0,0 +1,70 @@
++const assert = require("node:assert");
++const fs = require("node:fs");
++const os = require("node:os");
++const path = require("node:path");
++const { describe, it, beforeEach, afterEach } = require("node:test");
++
++const MideaTankwatchState = require("../../../../lib/robots/midea/MideaTankwatchState");
++
++const VALID = {
++    version: 1,
++    updated: 1700000000,
++    clean: {used_ml: 1000, capacity_ml: 2600, remaining_pct: 62, low: false, reset: 1699990000},
++    dirty: {used_ml: 500, capacity_ml: 2000, remaining_pct: 74, low: true, reset: 1699990000}
++};
++
++describe("MideaTankwatchState", () => {
++    let dir;
++    let file;
++
++    beforeEach(() => {
++        dir = fs.mkdtempSync(path.join(os.tmpdir(), "tankwatch-"));
++        file = path.join(dir, "state.json");
++    });
++
++    afterEach(() => {
++        fs.rmSync(dir, {recursive: true, force: true});
++    });
++
++    it("reads a valid state file", () => {
++        fs.writeFileSync(file, JSON.stringify(VALID));
++
++        assert.deepStrictEqual(MideaTankwatchState.read(file), {
++            clean: {remainingPercent: 62, low: false},
++            dirty: {remainingPercent: 74, low: true}
++        });
++    });
++
++    it("has no estimate without a file", () => {
++        assert.strictEqual(MideaTankwatchState.read(file), null);
++    });
++
++    it("has no estimate for malformed or unknown versions", () => {
++        fs.writeFileSync(file, "{nope");
++        assert.strictEqual(MideaTankwatchState.read(file), null);
++
++        fs.writeFileSync(file, JSON.stringify({...VALID, version: 2}));
++        assert.strictEqual(MideaTankwatchState.read(file), null);
++
++        fs.writeFileSync(file, JSON.stringify({version: 1, clean: {remaining_pct: "a", low: false}}));
++        assert.strictEqual(MideaTankwatchState.read(file), null);
++    });
++
++    it("drops only the tank that is invalid", () => {
++        fs.writeFileSync(file, JSON.stringify({...VALID, dirty: {remaining_pct: 140, low: false}}));
++
++        assert.deepStrictEqual(MideaTankwatchState.read(file), {
++            clean: {remainingPercent: 62, low: false},
++            dirty: null
++        });
++    });
++
++    it("picks up changes to the file", () => {
++        fs.writeFileSync(file, JSON.stringify(VALID));
++        MideaTankwatchState.read(file);
++
++        fs.writeFileSync(file, JSON.stringify({...VALID, clean: {...VALID.clean, remaining_pct: 10, low: true}}));
++
++        assert.deepStrictEqual(MideaTankwatchState.read(file).clean, {remainingPercent: 10, low: true});
++    });
++});

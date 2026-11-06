@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:19:03 +0100
-Subject: [PATCH 04/28] fix(midea): only read J15 dock status byte while on the
+Subject: [PATCH 04/31] fix(midea): only read J15 dock status byte while on the
  station
 
 Status byte 36 is multiplexed by the firmware: it carries the dock

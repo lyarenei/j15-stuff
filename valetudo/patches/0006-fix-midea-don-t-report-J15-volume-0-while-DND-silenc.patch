@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:20:10 +0100
-Subject: [PATCH 06/28] fix(midea): don't report J15 volume 0 while DND silence
+Subject: [PATCH 06/31] fix(midea): don't report J15 volume 0 while DND silence
  is active
 
 The firmware forces the voice_level status byte to 0 while the DND

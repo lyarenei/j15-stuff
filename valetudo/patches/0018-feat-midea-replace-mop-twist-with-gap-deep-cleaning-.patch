@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:18:35 +0100
-Subject: [PATCH 18/28] feat(midea): replace mop twist with gap deep cleaning
+Subject: [PATCH 18/31] feat(midea): replace mop twist with gap deep cleaning
  quirk
 
 The 0x9C 0x2e toggle that the V2 "mop twist" capability sets is the

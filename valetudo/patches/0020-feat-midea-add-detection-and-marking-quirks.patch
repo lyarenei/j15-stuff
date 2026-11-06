@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:19:07 +0100
-Subject: [PATCH 20/28] feat(midea): add detection and marking quirks
+Subject: [PATCH 20/31] feat(midea): add detection and marking quirks
 
 Expose more firmware toggles as quirks on the J15 Pro Ultra: AI carpet
 avoidance (0x9C 0x22), curtain detection (0x3b), big object recognition

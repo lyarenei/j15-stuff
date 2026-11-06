@@ -1,0 +1,92 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Fri, 6 Nov 2026 19:03:54 +0100
+Subject: [PATCH 29/31] feat(core): add a water tank consumable type
+
+Adds the water_tank consumable type with clean and dirty sub types, so
+robots can report dock water tank levels as consumables. Names for MQTT
+and the frontend are added; nothing changes for robots that don't use
+them.
+
+diff --git a/backend/lib/entities/core/ValetudoConsumable.js b/backend/lib/entities/core/ValetudoConsumable.js
+index 00b23520..0f01938e 100644
+--- a/backend/lib/entities/core/ValetudoConsumable.js
++++ b/backend/lib/entities/core/ValetudoConsumable.js
+@@ -32,6 +32,7 @@ ValetudoConsumable.TYPE = Object.freeze({
+     DETERGENT: "detergent",
+     BIN: "bin",
+     CLEANING: "cleaning",
++    WATER_TANK: "water_tank",
+ });
+ 
+ /**
+@@ -48,7 +49,9 @@ ValetudoConsumable.SUB_TYPE = Object.freeze({
+     SIDE_RIGHT: "side_right",
+     DOCK: "dock",
+     SENSOR: "sensor",
+-    WHEEL: "wheel"
++    WHEEL: "wheel",
++    CLEAN: "clean",
++    DIRTY: "dirty"
+ });
+ 
+ /**
+diff --git a/backend/lib/mqtt/capabilities/ConsumableMonitoringCapabilityMqttHandle.js b/backend/lib/mqtt/capabilities/ConsumableMonitoringCapabilityMqttHandle.js
+index e5afb7ca..36f368af 100644
+--- a/backend/lib/mqtt/capabilities/ConsumableMonitoringCapabilityMqttHandle.js
++++ b/backend/lib/mqtt/capabilities/ConsumableMonitoringCapabilityMqttHandle.js
+@@ -199,6 +199,7 @@ const TYPE_MAPPING = Object.freeze({
+     [ValetudoConsumable.TYPE.MOP]: "Mop",
+     [ValetudoConsumable.TYPE.DETERGENT]: "Detergent",
+     [ValetudoConsumable.TYPE.BIN]: "Bin",
++    [ValetudoConsumable.TYPE.WATER_TANK]: "Water Tank",
+ });
+ 
+ const SUBTYPE_MAPPING = Object.freeze({
+@@ -211,6 +212,8 @@ const SUBTYPE_MAPPING = Object.freeze({
+     [ValetudoConsumable.SUB_TYPE.DOCK]: "Dock",
+     [ValetudoConsumable.SUB_TYPE.SENSOR]: "Sensor",
+     [ValetudoConsumable.SUB_TYPE.WHEEL]: "Wheel",
++    [ValetudoConsumable.SUB_TYPE.CLEAN]: "Clean",
++    [ValetudoConsumable.SUB_TYPE.DIRTY]: "Dirty",
+ });
+ 
+ ConsumableMonitoringCapabilityMqttHandle.OPTIONAL = true;
+diff --git a/frontend/src/api/types.ts b/frontend/src/api/types.ts
+index b1bb31cd..cbf207ae 100644
+--- a/frontend/src/api/types.ts
++++ b/frontend/src/api/types.ts
+@@ -205,8 +205,8 @@ export interface MapSegmentMaterialControlProperties {
+     supportedMaterials: Array<MapSegmentMaterial>;
+ }
+ 
+-export type ConsumableType = "filter" | "brush" | "mop" | "detergent" | "bin" | "cleaning" ;
+-export type ConsumableSubType = "none" | "all" | "main" | "secondary" | "side_left" | "side_right" | "dock" | "sensor" | "wheel";
++export type ConsumableType = "filter" | "brush" | "mop" | "detergent" | "bin" | "cleaning" | "water_tank";
++export type ConsumableSubType = "none" | "all" | "main" | "secondary" | "side_left" | "side_right" | "dock" | "sensor" | "wheel" | "clean" | "dirty";
+ export type ConsumableUnit = "minutes" | "percent";
+ 
+ export interface ConsumableState {
+diff --git a/frontend/src/utils.ts b/frontend/src/utils.ts
+index 69576cad..92f984dd 100644
+--- a/frontend/src/utils.ts
++++ b/frontend/src/utils.ts
+@@ -132,7 +132,8 @@ const consumableTypeMapping: Record<ConsumableType, string> = {
+     "cleaning": "Cleaning",
+     "mop": "Mop",
+     "detergent": "Detergent",
+-    "bin": "Bin"
++    "bin": "Bin",
++    "water_tank": "Water Tank"
+ };
+ 
+ const consumableSubtypeMapping: Record<ConsumableSubType, string> = {
+@@ -145,6 +146,8 @@ const consumableSubtypeMapping: Record<ConsumableSubType, string> = {
+     "dock": "Dock",
+     "sensor": "Sensor",
+     "wheel": "Wheel",
++    "clean": "Clean",
++    "dirty": "Dirty",
+ };
+ 
+ export const getConsumableName = (type: ConsumableType, subType?: ConsumableSubType): string => {

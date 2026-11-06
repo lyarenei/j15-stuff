@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:22:26 +0100
-Subject: [PATCH 10/28] fix(midea): check the reply of 0x9C toggle writes
+Subject: [PATCH 10/31] fix(midea): check the reply of 0x9C toggle writes
 
 The firmware answers SET_VARIOUS_TOGGLES with [aa 01 9c result id value],
 result 0 for OK and 1 for an unknown id, an out-of-range value or an

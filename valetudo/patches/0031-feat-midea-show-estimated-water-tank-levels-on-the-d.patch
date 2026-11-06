@@ -1,0 +1,121 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Dominik Krivohlavek <github@xkrivo.net>
+Date: Fri, 6 Nov 2026 19:06:08 +0100
+Subject: [PATCH 31/31] feat(midea): show estimated water tank levels on the
+ dock panel
+
+When tankwatch has an estimate, the water tank dock component attributes
+carry estimatedRemainingPercent and low in their metaData. The dock panel
+shows "~62% left" for the clean tank and "~26% full" for the dirty
+tank while the firmware reports ok, and uses the warning colour when the
+estimate is low, which also turns the panel summary to Not OK. Empty,
+full and missing keep their text and colour.
+
+diff --git a/backend/lib/robots/midea/MideaValetudoRobot.js b/backend/lib/robots/midea/MideaValetudoRobot.js
+index 244f0ae0..c5dac9dc 100644
+--- a/backend/lib/robots/midea/MideaValetudoRobot.js
++++ b/backend/lib/robots/midea/MideaValetudoRobot.js
+@@ -9,6 +9,7 @@ const entities = require("../../entities");
+ const Logger = require("../../Logger");
+ const MideaMapHacksProvider = require("./MideaMapHacksProvider");
+ const MideaMapParser = require("./MideaMapParser");
++const MideaTankwatchState = require("./MideaTankwatchState");
+ const MSmartDummycloud = require("../../msmart/MSmartDummycloud");
+ const ValetudoRobot = require("../../core/ValetudoRobot");
+ const stateAttrs = entities.state.attributes;
+@@ -250,6 +251,7 @@ class MideaValetudoRobot extends ValetudoRobot {
+ 
+ 
+             const supportedDockComponents = this.getModelDetails().supportedDockComponents;
++            const tankEstimates = MideaTankwatchState.read();
+ 
+             if (supportedDockComponents.includes(stateAttrs.DockComponentStateAttribute.TYPE.WATER_TANK_CLEAN)) {
+                 let value = stateAttrs.DockComponentStateAttribute.VALUE.OK;
+@@ -262,7 +264,8 @@ class MideaValetudoRobot extends ValetudoRobot {
+ 
+                 this.state.upsertFirstMatchingAttribute(new stateAttrs.DockComponentStateAttribute({
+                     type: stateAttrs.DockComponentStateAttribute.TYPE.WATER_TANK_CLEAN,
+-                    value: value
++                    value: value,
++                    metaData: tankEstimateMetaData(tankEstimates?.clean)
+                 }));
+             }
+ 
+@@ -278,6 +281,7 @@ class MideaValetudoRobot extends ValetudoRobot {
+                 this.state.upsertFirstMatchingAttribute(new stateAttrs.DockComponentStateAttribute({
+                     type: stateAttrs.DockComponentStateAttribute.TYPE.WATER_TANK_DIRTY,
+                     value: dirtyTankValue,
++                    metaData: tankEstimateMetaData(tankEstimates?.dirty)
+                 }));
+             }
+ 
+@@ -1388,6 +1392,21 @@ class MideaValetudoRobot extends ValetudoRobot {
+     }
+ }
+ 
++/**
++ * @param {{remainingPercent: number, low: boolean}|null|undefined} estimate
++ * @returns {object|undefined}
++ */
++function tankEstimateMetaData(estimate) {
++    if (!estimate) {
++        return undefined;
++    }
++
++    return {
++        estimatedRemainingPercent: estimate.remainingPercent,
++        low: estimate.low
++    };
++}
++
+ // Not an error: the dock is emptying the dustbin
+ MideaValetudoRobot.STATION_CODE_COLLECT_DUST = 100;
+ 
+diff --git a/frontend/src/api/RawRobotState.ts b/frontend/src/api/RawRobotState.ts
+index cd563c73..d7be7c64 100644
+--- a/frontend/src/api/RawRobotState.ts
++++ b/frontend/src/api/RawRobotState.ts
+@@ -74,9 +74,14 @@ export interface DockStatusState {
+ export type DockComponentStateAttributeType = "water_tank_clean" | "water_tank_dirty" | "dustbag" | "detergent";
+ export type DockComponentStateAttributeValue = "ok" | "missing" | "empty" | "full" | "unknown";
+ 
++export interface DockComponentStateMetaData {
++    estimatedRemainingPercent?: number;
++    low?: boolean;
++}
++
+ export interface DockComponentState {
+     __class: RobotAttributeClass.DockComponentState;
+-    metaData: Record<string, never>;
++    metaData: DockComponentStateMetaData;
+     type: DockComponentStateAttributeType;
+     value: DockComponentStateAttributeValue;
+ }
+diff --git a/frontend/src/controls/Dock.tsx b/frontend/src/controls/Dock.tsx
+index 4706e948..0b5644cd 100644
+--- a/frontend/src/controls/Dock.tsx
++++ b/frontend/src/controls/Dock.tsx
+@@ -113,10 +113,21 @@ const DockComponents = ({ supportedTypes, dockComponents }: { supportedTypes: Do
+                 let statusText: string;
+                 let statusColor: string;
+ 
++                const estimatedRemainingPercent = attribute?.metaData?.estimatedRemainingPercent;
++                const hasEstimate = typeof estimatedRemainingPercent === "number" &&
++                    (type === "water_tank_clean" || type === "water_tank_dirty");
++
+                 switch (value) {
+                     case "ok":
+-                        statusText = "OK";
+-                        statusColor = palette.green;
++                        if (hasEstimate) {
++                            statusText = type === "water_tank_clean" ?
++                                `~${estimatedRemainingPercent}% left` :
++                                `~${100 - estimatedRemainingPercent}% full`;
++                            statusColor = attribute.metaData.low === true ? palette.yellow : palette.green;
++                        } else {
++                            statusText = "OK";
++                            statusColor = palette.green;
++                        }
+                         break;
+                     case "empty":
+                         statusText = "Empty";

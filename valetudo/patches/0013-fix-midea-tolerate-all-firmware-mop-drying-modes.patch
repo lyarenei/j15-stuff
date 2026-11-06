@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:17:44 +0100
-Subject: [PATCH 13/28] fix(midea): tolerate all firmware mop drying modes
+Subject: [PATCH 13/31] fix(midea): tolerate all firmware mop drying modes
 
 The firmware accepts mop drying modes 0-7 (6h, 3h, 1h, 100min, 3h, 2h,
 3h, 6h; modes 0, 4 and 7 use drying method 2, which is probably

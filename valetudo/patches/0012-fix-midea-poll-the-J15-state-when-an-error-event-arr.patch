@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:23:06 +0100
-Subject: [PATCH 12/28] fix(midea): poll the J15 state when an error event
+Subject: [PATCH 12/31] fix(midea): poll the J15 state when an error event
  arrives
 
 The robot pushes event 0x04 0xA3 on every fault change, but a status

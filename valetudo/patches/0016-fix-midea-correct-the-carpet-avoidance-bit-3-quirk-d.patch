@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:18:07 +0100
-Subject: [PATCH 16/28] fix(midea): correct the carpet avoidance bit 3 quirk
+Subject: [PATCH 16/31] fix(midea): correct the carpet avoidance bit 3 quirk
  description
 
 Bit 3 of the 0x5E carpet settings is stored by the firmware as

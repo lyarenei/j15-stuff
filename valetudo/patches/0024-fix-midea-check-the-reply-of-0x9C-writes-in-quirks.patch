@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:25:24 +0100
-Subject: [PATCH 24/28] fix(midea): check the reply of 0x9C writes in quirks
+Subject: [PATCH 24/31] fix(midea): check the reply of 0x9C writes in quirks
 
 Route all SET_VARIOUS_TOGGLES writes in the quirk factory and the
 Midea capabilities through setToggle so rejected writes throw.

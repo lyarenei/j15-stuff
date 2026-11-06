@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:52:17 +0100
-Subject: [PATCH 25/28] feat(midea): parse the room info reply
+Subject: [PATCH 25/31] feat(midea): parse the room info reply
 
 ACTION 0x28 returns every room with its stored clean count, fan speed,
 water level, clean sequence, fluid type, vacuum/mop mode and route type.

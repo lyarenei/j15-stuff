@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:17:59 +0100
-Subject: [PATCH 01/28] fix(midea): map J15 robot error codes from firmware
+Subject: [PATCH 01/31] fix(midea): map J15 robot error codes from firmware
  table
 
 Correct the message, subsystem and severity of 1-19, 1-20, 1-21, 1-22,

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:18:45 +0100
-Subject: [PATCH 03/28] fix(midea): report J15 work status 3 as paused instead
+Subject: [PATCH 03/31] fix(midea): report J15 work status 3 as paused instead
  of docked
 
 The firmware sends work status 3 for GoingHomePause and as the fallback

@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:17:50 +0100
-Subject: [PATCH 14/28] fix(midea): apply mop dock wash quirks to the custom
+Subject: [PATCH 14/31] fix(midea): apply mop dock wash quirks to the custom
  pair too
 
 The firmware uses the custom backwash area and wash mode instead of the

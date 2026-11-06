@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:18:35 +0100
-Subject: [PATCH 17/28] feat(midea): replace collision avoidance with edge deep
+Subject: [PATCH 17/31] feat(midea): replace collision avoidance with edge deep
  vacuum quirk
 
 The 0x9C 0x31 toggle that the "collision-avoidant navigation" capability

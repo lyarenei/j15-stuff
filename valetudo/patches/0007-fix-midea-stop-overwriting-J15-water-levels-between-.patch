@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Dominik Krivohlavek <github@xkrivo.net>
 Date: Wed, 4 Nov 2026 19:20:45 +0100
-Subject: [PATCH 07/28] fix(midea): stop overwriting J15 water levels between
+Subject: [PATCH 07/31] fix(midea): stop overwriting J15 water levels between
  presets
 
 When the reported water level was above 100 but not one of the five
