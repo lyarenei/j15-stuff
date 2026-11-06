@@ -88,6 +88,9 @@ tested on the robot.** The `#` column refers to the mismatch table in
 | 0026 | Room info writer (SETTING 0x2B v2) | |
 | 0027 | `MideaRoomOrderHelper`: ordered cleanups | |
 | 0028 | Custom segment order on the J15 Pro Ultra | |
+| 0029 | Core: `water_tank` consumable type with `clean` / `dirty` sub types (backend, MQTT names, frontend) | |
+| 0030 | Tankwatch state file reader and consumable monitoring capability (J15 Pro Ultra, only if the file exists) | |
+| 0031 | Dock panel tiles show the estimated tank level and a low warning | |
 
 Room order (0025–0028) works with or without the `roomorder` firmware patch:
 if `/usr/navi/manager_node` is a mount in `/proc/mounts`, the request order
@@ -98,6 +101,23 @@ in `robot.implementationSpecificConfig.roomOrderRestore` in the Valetudo
 config, so it survives a restart. Details in
 [room-order-investigation.md](room-order-investigation.md) and
 [valetudo-comparison/room-info.md](valetudo-comparison/room-info.md).
+
+Tank estimates (0029–0031) come from the `tankwatch` daemon on the robot
+(see [water-tank-investigation.md](water-tank-investigation.md)). Valetudo
+only reads `/userdata/tankwatch/state.json` (cached by mtime; a missing,
+malformed or version != 1 file means no estimate) and never talks to the
+robot about it. If the file exists at startup, the J15 Pro Ultra registers a
+consumable monitoring capability with two percent consumables, "Clean Water
+Tank" (water left) and "Dirty Water Tank" (space left). Resetting one (user
+refilled or emptied the tank) creates the empty flag file
+`/tmp/tankwatch.reset-clean` or `/tmp/tankwatch.reset-dirty`, which the
+daemon applies within about 2 s. Without the file nothing changes, so a
+restart is needed after installing tankwatch for the consumables to appear.
+The dock tiles pick up the estimate on every state update with a station
+code: while the firmware says ok, they read "~62% left" (clean) or "~26%
+full" (dirty, 100 minus the space left) and turn yellow, making the panel
+"Not OK", when tankwatch flags the tank as low. Firmware states empty, full
+and missing keep their text and colour. Untested on the robot.
 
 Not done: per-room fan/water/route settings. They only take effect in
 operation mode 6 ("customized clean"), which also moves vacuum-only rooms to
