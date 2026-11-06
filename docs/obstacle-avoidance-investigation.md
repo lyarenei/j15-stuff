@@ -1,6 +1,6 @@
 # Investigation: wide berth around obstacles
 
-**Status:** cause found (static analysis and logs from one clean). Nothing
+**Status:** cause found (static analysis and logs from one clean, two passes). Nothing
 built or tested yet. Started 2026-11-06.
 
 ## Symptom
@@ -26,12 +26,37 @@ hard-coded, not in `planner.json`, so no setting changes them. The
 "AI Obstacle Classification" quirk (normal/smart/super) isn't read on this
 path at all.
 
-The type numbers match Valetudo's `AI_OBSTACLE_IDS` (`MideaConst.js`) and the
-obstacle images in `/userdata/aiimgs/<type>-…jpg`: 1 shoes, 2 trash can,
-3 pet bowl, 4 weighing scale, 5 textiles, 6 entrapping furniture, 7 electric
-wire, 8 charging base, 9 feces, 18 pedestal, 24 power strip. The overlap is
-consistent with the logs, but that the planner's `AiType` uses the same
-numbering is an inference.
+**Planner `AiType` = Valetudo obstacle ID − 1.** Valetudo's IDs come from
+`AI_OBSTACLE_IDS` in `MideaConst.js` and the photo names in
+`/userdata/aiimgs/<id>-…jpg`. Photo times line up with the first planner
+trigger of each object:
+
+| Photo | Planner trigger |
+|---|---|
+| ID 5 textiles, 13:37:20 | type 4, 13:37:21 |
+| ID 4 weighing scale, 13:54:13 | type 3, 13:54:15 |
+| ID 7 electric wire, 13:54:57 | type 6, 13:55:06 |
+
+The user saw the robot circling a weighing scale at the time of the type-3
+triggers. Named with that offset:
+
+| Planner type | Object (Valetudo ID) | Level | Turns away at |
+|---|---|---|---|
+| 0 | shoes (1) | 3 | 350 mm |
+| 1 | trash can (2) | 2 | 350 mm |
+| 2 | pet bowl (3) | 2 | 350 mm |
+| 3 | weighing scale (4) | 2 | 350 mm |
+| 4 | textiles (5) | 2 | 350 mm |
+| 5 | entrapping furniture (6) | 1 | never (handled elsewhere) |
+| 6 | electric wire (7) | 4 | 400 mm |
+| 7 | charging base (8) | 2 | 350 mm |
+| 8 | feces (9) | 4 | 400 mm |
+| 17 | pedestal (18) | 2 | 350 mm |
+| 23 | power strip (24) | 2 | 350 mm |
+
+Entrapping furniture (planner 5) has photos but never shows up as a trigger,
+which fits its level 1. Which object `PlannerConfig+0x443` raises (planner 9,
+Valetudo ID 10) isn't known.
 
 ## Evidence
 
@@ -122,14 +147,19 @@ So there are two mechanisms. In a zigzag line the robot turns away at the
 350/400 mm threshold, which is wide. During the edge walk it circles the
 object at 0.40 m from an estimated centre, and when that estimate is off, the
 path runs close. The edge walk doesn't apply the threshold while it crosses by
-line laser. This explains closer approaches during an edge walk. Whether the
-user's "closer" was an edge walk or a zigzag line isn't known yet.
+line laser. This explains closer approaches during an edge walk. The user confirmed
+that the close approach was the robot circling a weighing scale.
 
-The same type-3 object, was approached over
-and over: 1269 triggers in the first log, ≈ 2500 in the second. No
-`/userdata/aiimgs/3-*.jpg` exists, although every other type that triggered
-has photos. So the planner's `AiType` may **not** use Valetudo's ID numbering.
-That would make the type names in the summary table unreliable.
+The same type-3 object (the weighing scale),
+was approached over and over: 1269 triggers in the first log, ≈ 2500 in the
+second. No `3-*.jpg` photo exists because the photos use Valetudo's IDs
+(`4-*.jpg` here; see the mapping in the summary).
+
+Geometry: a scale is roughly a 30 cm square. On a 0.40 m circle around its
+centre, the robot's centre passes about 19–25 cm from the scale's corners and
+sides. That leaves roughly 1.5–7.5 cm to the bumper, which matches the
+211–255 mm `dis` values. Circling is the mode that gets close. The
+straight-line turn-away at 350 mm is the one that leaves the gap.
 
 ## Possible fix
 
@@ -151,7 +181,7 @@ and watch wires and shoes.
   virtual bumper. Does that layer keep the coverage path away from them too?
   Cheap test: one clean with Big Object Recognition off, then compare.
 - What sets `PlannerConfig+0x440` at runtime?
-- Does the planner's `AiType` numbering really match the IDs Valetudo shows?
+- Which object is planner type 9 (Valetudo ID 10), which `PlannerConfig+0x443` raises to level 4?
 
 ## Method
 
