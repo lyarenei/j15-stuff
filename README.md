@@ -44,7 +44,8 @@ Each component installs on its own. All are installed from your computer with
   the firmware version they were written for and refuse anything else.
 - A computer with `ssh`. Other tools depend on the component: `make` and a
   C cross-compiler for camstream, `git`, `node` 20+ and `npm` for the patched
-  Valetudo. The other components need nothing else.
+  Valetudo, and Python 3 for `tools/wifimap.py`. The other components need
+  nothing else.
 
 ## Quick start
 
