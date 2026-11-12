@@ -3,9 +3,10 @@
 Estimates how full the dock's clean and dirty water tanks are. The dock has no
 level sensors, so tankwatch counts the water the logs say was used. Use it to
 get a warning before the clean tank runs empty or the dirty tank fills up.
-Status: verified on the robot. The constants come from one measured mopping
-job, so calibrating them for your dock is recommended (see
-[Calibrating for your dock](#calibrating-for-your-dock)).
+Status: runs on the robot. The counting was checked by replaying recorded
+logs and has not yet been seen through a live mopping job. The constants come
+from one measured mopping job, so calibrating them for your dock is recommended
+(see [Calibrating for your dock](#calibrating-for-your-dock)).
 
 ## What the dock tells you without it
 

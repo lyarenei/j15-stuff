@@ -31,7 +31,7 @@ Each component installs on its own. All are installed from your computer with
 |---|---|---|---|---|
 | [camstream](docs/camstream.md) | Live video from the robot's camera as H.264 over your local network, for Home Assistant, Frigate, VLC or a browser (through go2rtc). Includes `camera-check`, a camera pipeline diagnostic. | Yes (C, cross-compiled) | No | Verified on the robot. |
 | [persistlog](docs/persistlog.md) | Keeps the robot's logs across reboots and further back than the firmware does. | No | No | Verified on the robot. |
-| [tankwatch](docs/tankwatch.md) | Estimates how full the dock's clean and dirty water tanks are (the dock has no level sensors). | No | No | Verified on the robot. Calibration recommended. |
+| [tankwatch](docs/tankwatch.md) | Estimates how full the dock's clean and dirty water tanks are (the dock has no level sensors). | No | No | Runs on the robot. Counting checked by replaying recorded logs, not yet seen through a live mopping job. Calibration recommended. |
 | [wifimap](docs/wifimap.md) | Records the robot's Wi-Fi signal strength by position while it cleans, and draws a heatmap over the Valetudo map. | No | No | Untested. |
 | [roomorder](docs/roomorder.md) | Firmware patch: cleans selected rooms in the order you selected them. Optional if you use the patched Valetudo. | No | Yes, all nodes | Untested. |
 | [obstaclegap](docs/obstaclegap.md) | Firmware patch: turns away from recognised objects at 270 mm instead of 350 mm, so less floor around them stays uncleaned. | No | Yes, all nodes | Verified on the robot. |
