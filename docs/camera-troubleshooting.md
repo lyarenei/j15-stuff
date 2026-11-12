@@ -17,7 +17,15 @@ It checks each stage below and says where the pipeline breaks.
 
 ## What each stage looks like
 
-### 1. The sensor answers on I2C (boot time)
+### 1. The driver is bound
+
+```sh
+for d in /sys/bus/i2c/devices/2-00*; do echo "$d $(cat $d/name) driver=$(readlink $d/driver)"; done
+```
+
+An empty `driver=` for `2-0030` means the probe failed.
+
+### 2. The sensor answers on I2C (boot time)
 
 The sensor driver probes once at boot. If the boot messages have scrolled
 out of `dmesg` (they do after a few weeks of uptime), reboot first.
@@ -42,14 +50,6 @@ sc035hgs 2-0030: Dropping the link to regulator.2
 `EPROBE_DEFER`: the first attempt was postponed until the regulators were
 ready, and the retry a moment later is the one that counts.
 `ov02b10 ... ret(-6)` is also normal, because that sensor isn't fitted.
-
-### 2. The driver is bound
-
-```sh
-for d in /sys/bus/i2c/devices/2-00*; do echo "$d $(cat $d/name) driver=$(readlink $d/driver)"; done
-```
-
-An empty `driver=` for `2-0030` means the probe failed.
 
 ### 3. The sensor is in the media graph
 
@@ -77,6 +77,15 @@ This should be `0`. With a dead sensor, `video_node` logs
 `vcm_ start_capture failed` and
 `Could not get buffers from device. errno = 16` on every attempt. It can also
 segfault (`/userdata/logs/crash/coredump/video_node-bt-*`).
+
+### 5. The control interface is there
+
+```sh
+ubus -s /tmp/ubus.sock list media.engine.control
+```
+
+This should list the object. If it is missing, `video_node` isn't running or
+the firmware differs from the one the tools were written for.
 
 ## Fixing a sensor that doesn't respond
 
