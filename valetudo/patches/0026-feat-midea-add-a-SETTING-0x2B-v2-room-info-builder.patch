@@ -9,7 +9,8 @@ hard-codes version 1, which leaves the fluid type and vacuum/mop mode
 uninitialized in the firmware, so add a builder for the v2 layout. Its
 entry layout differs from the ACTION 0x28 reply.
 
-Based on static analysis; untested on the robot.
+Based on static analysis; verified on the robot together with the other
+room order patches.
 
 diff --git a/backend/lib/msmart/MSmartPacket.js b/backend/lib/msmart/MSmartPacket.js
 index afd36396..4b4b0510 100644

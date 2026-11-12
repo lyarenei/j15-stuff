@@ -11,7 +11,8 @@ byte), older firmware with version 1 (5 bytes per room).
 Fan, water and route are in the IoT encodings that SETTING 0x2B decodes,
 so they can be written back unchanged.
 
-Based on static analysis; untested on the robot.
+Based on static analysis; verified on the robot together with the other
+room order patches.
 
 diff --git a/backend/lib/msmart/BEightParser.js b/backend/lib/msmart/BEightParser.js
 index 48cd10e4..64e81d49 100644

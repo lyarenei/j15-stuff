@@ -8,7 +8,8 @@ Use the room order helper when a segment cleanup is requested with a
 custom order. The robot only gets the helper on the J15 Pro Ultra, whose
 firmware answers the room info request with the v2 layout.
 
-Based on static analysis; untested on the robot.
+Based on static analysis; verified on the robot together with the other
+room order patches.
 
 diff --git a/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js b/backend/lib/robots/midea/MideaJ15ProUltraValetudoRobot.js
 index 0fe2caae..e02a4c36 100644

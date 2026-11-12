@@ -23,7 +23,8 @@ If /usr/navi/manager_node is a mount point, the patched manager_node
 keeps the request order as long as all selected rooms have cleanSeq 0,
 so no write is needed in that case.
 
-Based on static analysis; untested on the robot.
+Based on static analysis; verified on the robot together with the other
+room order patches.
 
 diff --git a/backend/lib/robots/midea/MideaRoomOrderHelper.js b/backend/lib/robots/midea/MideaRoomOrderHelper.js
 new file mode 100644
