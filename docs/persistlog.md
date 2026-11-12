@@ -67,7 +67,7 @@ photos, video, and map data. Only a whitelist of file patterns is copied.
 | `MAX_MB` | `64` | size cap of the store; the oldest boots are deleted first |
 | `MIN_FREE_MB` | `50` | copying pauses while `/userdata` has less free space |
 | `INTERVAL` | `600` | seconds between sync cycles |
-| `EXTRA_LOGS` | `/tmp/valetudo.log /tmp/camstream.log` | extra text logs to snapshot |
+| `EXTRA_LOGS` | `/tmp/valetudo.log /tmp/camstream.log /tmp/tankwatch.log /tmp/wifimap.log /tmp/roomorder.log /tmp/obstaclegap.log` | extra text logs to snapshot; missing files are skipped |
 
 Restart after editing: reboot, or run `./install.sh persistlog-install <ip>`
 again (it keeps your config).

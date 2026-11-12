@@ -17,7 +17,7 @@ STORE=${STORE:-/userdata/persist-logs}
 MAX_MB=64
 MIN_FREE_MB=50
 INTERVAL=600
-EXTRA_LOGS="/tmp/valetudo.log /tmp/camstream.log"
+EXTRA_LOGS="/tmp/valetudo.log /tmp/camstream.log /tmp/tankwatch.log /tmp/wifimap.log /tmp/roomorder.log /tmp/obstaclegap.log"
 [ -f "$CONF" ] && . "$CONF"
 
 echo $$ > "${PIDFILE:-/tmp/persistlog.pid}"
