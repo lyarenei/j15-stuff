@@ -105,7 +105,7 @@ Unix time, with a header line:
 
 ```
 t,x_mm,y_mm,theta_deg,dbm,bssid,freq_mhz
-1793000000,-3101,2701,155,-37,74:fe:48:aa:bb:cc,2412
+1793000000,-1500,2000,90,-52,02:00:00:aa:bb:cc,2412
 ```
 
 - `t`: Unix time of the sample (the robot's clock is UTC).
