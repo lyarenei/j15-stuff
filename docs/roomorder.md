@@ -16,7 +16,7 @@ the order looks random.
 | | Patched Valetudo | roomorder |
 |---|---|---|
 | What it does | Writes sequence numbers 1..N on the selected rooms before the clean, and restores the old values afterwards | Changes one instruction in a copy of `manager_node`, so the request order is kept |
-| Touches on the robot | nothing | bind-mounts a patched binary over the vendor one, restarts all nodes |
+| Touches on the robot | changes only the rooms' stored sequence numbers (restored after the clean) | bind-mounts a patched binary over the vendor one, restarts all nodes |
 | Status | Verified on the robot. | Untested. |
 | After a firmware update | still works if the layout didn't change | has to be re-created (the installer refuses other versions) |
 
