@@ -110,7 +110,7 @@ t,x_mm,y_mm,theta_deg,dbm,bssid,freq_mhz
 
 - `t`: Unix time of the sample (the robot's clock is UTC).
 - `x_mm`, `y_mm`, `theta_deg`: the planner's position in mm, and heading in
-  degrees. The origin is the dock.
+  degrees. The origin is close to the dock (see the formula below).
 - `dbm`: signal level; empty when there is no value.
 - `bssid`, `freq_mhz`: access point and channel, empty when not connected.
 
