@@ -4,7 +4,7 @@ A patch series on top of a Valetudo release, built into an aarch64 binary and
 installed over the stock one on the robot. It fixes and extends Valetudo's
 Midea driver without waiting for upstream and without forking the project.
 Status: runs on the robot (Valetudo 2026.10.0, patches 0001 to 0031). Room
-order and the tank levels are verified there; the driver fixes (0001 to 0024)
+order and the tank levels are verified there; patches 0001 to 0024
 come from static analysis and haven't each been tried on the robot.
 
 ## What it fixes and adds
@@ -25,12 +25,18 @@ core addition for tank consumables and the frontend dock tiles).
 - Water levels between presets are reported instead of overwritten.
 - Operation mode 5 is read as vacuum and mop. Fan levels 0 and 5 are reported
   as off and max.
+- Unknown floor materials no longer log a warning each time.
 
 **Settings and quirks**
 
 - Better labels: AI obstacle classification options are normal / smart /
   super, and "AI Carpet Detection" has a proper title.
-- J15 Pro Ultra quirks: "Edge Deep Vacuum" and "Gap Deep Cleaning".
+- J15 Pro Ultra quirks: "Edge Deep Vacuum" and "Gap Deep Cleaning". They
+  replace the collision-avoidant navigation and mop twist settings, which were
+  setting these two firmware options under the wrong names.
+- Mop drying modes that the vendor app or the firmware default selected used
+  to make the drying time setting fail. They are now shown as the closest
+  preset.
 - Newly exposed quirks: criss-cross, zigzag to end, AI carpet avoidance,
   curtain detection, big object recognition, fall-down detection, stuck spot
   marking, continuous cleaning, child lock follows DND, narrow zone recharge,
@@ -110,7 +116,8 @@ minute once dependencies are installed, and the output is about 37 MB.
 
 `valetudo-uninstall` restores the backup, re-enables the updater if the
 installer was the one that disabled it, restarts Valetudo and deletes the
-backup. Use `valetudo-restart` after installing or uninstalling
+backup. The `<config>.pre-patched` copy of the config is left in place. Use
+`valetudo-restart` after installing or uninstalling
 [tankwatch](tankwatch.md).
 
 There is no boot hook. The binary replaces the stock one in place, and the
