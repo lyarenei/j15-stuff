@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # Installs camstream, persistlog, tankwatch, wifimap, roomorder, obstaclegap and a patched Valetudo on a rooted Midea J15 over SSH. Run from your computer.
 #
-#   ./install.sh install   <robot-ip> [ssh options]   copy files, add boot hook, start
-#   ./install.sh uninstall <robot-ip> [ssh options]   stop, remove files and boot hook
-#   ./install.sh restart   <robot-ip> [ssh options]   restart (e.g. after editing the config)
-#   ./install.sh status    <robot-ip> [ssh options]   show whether it is running
+#   ./install.sh install   <robot-ip> [ssh options]   camstream: copy files, add boot hook, start
+#   ./install.sh uninstall <robot-ip> [ssh options]   camstream: stop, remove files and boot hook
+#   ./install.sh restart   <robot-ip> [ssh options]   camstream: restart (e.g. after editing config)
+#   ./install.sh status    <robot-ip> [ssh options]   camstream: show whether it is running
 #   ./install.sh check     <robot-ip> [ssh options]   run the camera pipeline diagnostic
 #   ./install.sh collect-logs <robot-ip> [ssh options]  save robot logs + dmesg to a local .tar
 #   ./install.sh persistlog-install   <robot-ip> [ssh options]  keep vendor logs across reboots
 #   ./install.sh persistlog-uninstall <robot-ip> [ssh options]  stop and remove (saved logs are kept)
 #   ./install.sh persistlog-status    <robot-ip> [ssh options]  show state and saved boots
 #   ./install.sh tankwatch-install    <robot-ip> [ssh options]  estimate the dock's water tank levels
-#   ./install.sh tankwatch-uninstall  <robot-ip> [ssh options]  stop and remove (state and calibration log are kept)
+#   ./install.sh tankwatch-uninstall  <robot-ip> [ssh options]  stop and remove (state is renamed, calibration log is kept)
 #   ./install.sh tankwatch-status     <robot-ip> [ssh options]  show state and recent log
 #   ./install.sh wifimap-install      <robot-ip> [ssh options]  record Wi-Fi signal strength by position while cleaning
 #   ./install.sh wifimap-uninstall    <robot-ip> [ssh options]  stop and remove (recorded samples are kept)
