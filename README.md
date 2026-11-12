@@ -96,7 +96,8 @@ Helper scripts for your computer, in [tools/](tools/):
 
 - `mop-timeline.py`: lists mop events from robot logs.
 - `fdt2dts.py`: converts a device tree blob to text.
-- `tankwatch-replay.sh`: runs robot data logs through the tankwatch model.
+- `tankwatch-replay.sh`: runs robot data and manager logs through the tankwatch
+  model.
 - `wifimap.py`: draws the wifimap samples as a heatmap over the Valetudo map.
 
 ## Security

@@ -42,8 +42,10 @@ The counters reset like this:
   implemented from a string in the firmware and hasn't been seen to fire. If
   the clean level jumps to empty without a real empty tank, report it.
 
-When installed, tankwatch assumes the clean tank is full and the dirty tank is
-empty. Reset them if they aren't.
+On a first install, tankwatch assumes the clean tank is full and the dirty
+tank is empty. If that isn't true, the estimates are off until you next refill
+the clean tank and empty the dirty one (and reset them). Installing again over
+an existing install keeps the current counters.
 
 ## Requirements
 
@@ -75,8 +77,9 @@ left" for the clean tank, "~26% full" for the dirty one) and as consumables
 ("Clean Water Tank", "Dirty Water Tank"). A tank flagged low turns its tile
 yellow. Resetting a consumable resets the tankwatch counter.
 
-Valetudo reads the state file only at startup, to decide whether to show the
-consumables. After installing or uninstalling tankwatch, restart Valetudo:
+At startup, Valetudo only checks whether the state file exists, to decide
+whether to show the consumables; it re-reads the levels whenever the file
+changes. After installing or uninstalling tankwatch, restart Valetudo:
 
 ```sh
 ./install.sh valetudo-restart 192.168.1.50
@@ -131,9 +134,10 @@ One job can't tell the flow term from the refill term, so the single factor in
 step 5 is a compromise. To separate them, repeat on a second job with a
 different number of washes (for example a different room count), collect the
 logs with `./install.sh collect-logs 192.168.1.50`, and solve for the two
-constants. `tools/tankwatch-replay.sh <log>...` runs data logs through the same
-model on your computer and prints the resulting state, so you can try constants
-against logs you already have.
+constants. `tools/tankwatch-replay.sh <log>...` runs data and manager logs
+through the same model on your computer and prints the resulting state, so you
+can try constants against logs you already have. The manager logs are needed
+for the clean-tank-empty trigger.
 
 If the dock reports the dirty tank full or the clean tank empty, check
 `/userdata/tankwatch/calibration.log` (shown by `tankwatch-status`): it lists

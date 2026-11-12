@@ -49,9 +49,10 @@ core addition for tank consumables and the frontend dock tiles).
 
 - "Clean Water Tank" and "Dirty Water Tank" consumables, with reset, and
   estimated levels with a low warning on the Dock panel. Needs
-  [tankwatch](tankwatch.md) on the robot. Valetudo only reads
+  [tankwatch](tankwatch.md) on the robot. Valetudo reads
   `/userdata/tankwatch/state.json`; if the file doesn't exist when Valetudo
-  starts, nothing is shown.
+  starts, nothing is shown. Resetting a consumable creates a flag file
+  (`/tmp/tankwatch.reset-clean` or `/tmp/tankwatch.reset-dirty`) for tankwatch.
 
 Not included: per-room fan, water and route settings. They only take effect in
 "customized clean" mode, which also moves vacuum-only rooms to the front, and

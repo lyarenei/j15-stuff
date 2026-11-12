@@ -377,7 +377,8 @@ EOF
     remote '/userdata/tankwatch.sh >/dev/null 2>&1 </dev/null &'
     echo
     echo "Installed. The estimates are in /userdata/tankwatch/state.json; see ./install.sh tankwatch-status $ROBOT"
-    echo "Assumes the clean tank is full and the dirty tank empty right now; mark them with:"
+    echo "A first install assumes the clean tank is full and the dirty tank empty."
+    echo "After refilling or emptying a tank, reset it with:"
     echo "  ssh root@$ROBOT /userdata/tankwatch.sh reset clean|dirty"
     tankwatch_valetudo_note "shows the tank levels"
     ;;

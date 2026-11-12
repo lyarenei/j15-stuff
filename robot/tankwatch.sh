@@ -1,9 +1,9 @@
 #!/bin/sh
 # Runs on the robot. Estimates the dock's clean and dirty water tank levels by
-# following the data_node log (the dock has no level sensors) and keeps them in
-# /userdata/tankwatch/state.json. Started at boot from /oem/_root_postboot.sh
-# by install.sh. The model is in tankwatch.awk; `tankwatch.sh reset clean|dirty`
-# marks a tank as refilled / emptied.
+# following the data_node and manager_node logs (the dock has no level sensors)
+# and keeps them in /userdata/tankwatch/state.json. Started at boot from
+# /oem/_root_postboot.sh by install.sh. The model is in tankwatch.awk;
+# `tankwatch.sh reset clean|dirty` marks a tank as refilled / emptied.
 
 CONF=${CONF:-/userdata/tankwatch.conf}
 LOG=${LOG:-/tmp/tankwatch.log}
