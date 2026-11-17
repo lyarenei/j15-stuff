@@ -101,17 +101,28 @@ fresh `state.json` and doesn't restore the renamed file.
 | `DIRTY_CAPACITY_ML` | `3400` | dirty tank size |
 | `FLOW_ML_PER_UNIT_S` | `0.016667` | mL per unit of the supply flow reading per second (the reading looks like mL/min, so 1/60) |
 | `REFILL_ML_PER_S` | `3.1` | mL taken from the clean tank per second of robot tank refill |
-| `DIRTY_ML_PER_PUMP_S` | `1.4` | mL moved into the dirty tank per second of dirty pump running |
+| `DIRTY_ML_PER_PUMP_S` | `1.9` | mL moved into the dirty tank per second of dirty pump running |
 | `LOW_PCT` | `20` | a tank is low below this percent remaining (clean) or free (dirty) |
 
 Restart after editing: reboot, or run `./install.sh tankwatch-install <ip>`
 again (it keeps your config).
 
-The defaults were fitted to one mopping job (clean tank full and dirty tank
-empty at the start): 69,730 unit-seconds of flow, 110 s of robot refill and
-645 s of dirty pump, which used about 1.5 L of clean water and put about
-0.9 L into the dirty tank. The refill constant is a fit to that single job,
-not measured separately.
+The defaults come from two measured mopping jobs, each started with a full
+clean tank and an empty dirty tank:
+
+| Job | Flow (unit-seconds) | Refill | Dirty pump | Clean used | Dirty collected |
+|-----|---------------------|--------|------------|------------|-----------------|
+| A   | 69,730              | 110 s  | 645 s      | about 1.5 L | about 0.9 L    |
+| B   | 44,554              | 110 s  | 425 s      | about 1.1 L | about 0.82 L   |
+
+Clean: the flow (1/60) and refill (3.1) constants were fitted on job A and
+predicted job B within 2% (1083 mL against about 1100 mL), so they were kept.
+Solving both jobs exactly gives 0.0159 and 3.56, but the difference is inside
+the measuring error.
+
+Dirty: pump time is a weak predictor. It comes to 1.40 mL/s on job A and
+1.93 mL/s on job B. The default of 1.9 is deliberately the higher value, so the
+"tank full" warning comes early rather than late.
 
 ## Calibrating for your dock
 
@@ -133,8 +144,8 @@ Do this after a mopping job, before you touch the tanks.
 
 One job can't tell the flow term from the refill term, so the single factor in
 step 5 is a compromise. To separate them, repeat on a second job with a
-different number of washes (for example a different room count), collect the
-logs with `./install.sh collect-logs 192.168.1.50`, and solve for the two
+different number of washes (for example a different room count), as the
+defaults were, collect the logs with `./install.sh collect-logs 192.168.1.50`, and solve for the two
 constants. `tools/tankwatch-replay.sh <log>...` runs data and manager logs
 through the same model on your computer and prints the resulting state, so you
 can try constants against logs you already have. The manager logs are needed
