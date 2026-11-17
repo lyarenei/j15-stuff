@@ -58,16 +58,19 @@ function calibrate(what, est) {
 function line_time(   a, t) {
     split($2, a, ":")
     t = a[1] * 3600 + a[2] * 60 + a[3] + day
-    if (have_t && t < last_t - 43200) { day += 86400; t += 86400 }
+    if (have_prev && t < prev_t - 43200) { day += 86400; t += 86400 }
+    prev_t = t; have_prev = 1
     return t
 }
 
 function advance(t,   dt) {
     if (have_t && t > last_t) {
         dt = t - last_t
-        clean += flow * dt * FLOW_ML_PER_UNIT_S
-        if (refill) clean += dt * REFILL_ML_PER_S
-        if (pump) dirty += dt * DIRTY_ML_PER_PUMP_S
+        if (dt <= 900) {
+            clean += flow * dt * FLOW_ML_PER_UNIT_S
+            if (refill) clean += dt * REFILL_ML_PER_S
+            if (pump) dirty += dt * DIRTY_ML_PER_PUMP_S
+        }
     }
     if (!have_t || t > last_t) last_t = t
     have_t = 1
@@ -116,7 +119,7 @@ index($0, "kWaterTankLackWater") {
     next
 }
 
-/^[IWEF][0-9]+ / {
+$1 ~ /^[IWEF][0-9][0-9][0-9][0-9]$/ && $2 ~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9]+$/ {
     t = line_time()
 
     if (index($0, "regiser success")) {
