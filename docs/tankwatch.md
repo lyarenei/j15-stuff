@@ -4,8 +4,9 @@ Estimates how full the dock's clean and dirty water tanks are. The dock has no
 level sensors, so tankwatch counts the water the logs say was used. Use it to
 get a warning before the clean tank runs empty or the dirty tank fills up.
 Status: runs on the robot. The counting was checked by replaying recorded
-logs and has not yet been seen through a live mopping job. The constants come
-from one measured mopping job, so calibrating them for your dock is recommended
+logs and by one live mopping job, where the live count matched the replay. The
+constants come from three measured mopping jobs on one dock, so calibrating
+them for your dock is recommended
 (see [Calibrating for your dock](#calibrating-for-your-dock)).
 
 ## What the dock tells you without it
@@ -99,30 +100,35 @@ fresh `state.json` and doesn't restore the renamed file.
 |---|---|---|
 | `CLEAN_CAPACITY_ML` | `4000` | clean tank size |
 | `DIRTY_CAPACITY_ML` | `3400` | dirty tank size |
-| `FLOW_ML_PER_UNIT_S` | `0.016667` | mL per unit of the supply flow reading per second (the reading looks like mL/min, so 1/60) |
-| `REFILL_ML_PER_S` | `3.1` | mL taken from the clean tank per second of robot tank refill |
-| `DIRTY_ML_PER_PUMP_S` | `1.9` | mL moved into the dirty tank per second of dirty pump running |
+| `FLOW_ML_PER_UNIT_S` | `0.0193` | mL per unit of the supply flow reading per second (fitted; close to, but not exactly, mL/min, which would be 0.0167) |
+| `REFILL_ML_PER_S` | `1.9` | mL taken from the clean tank per second of robot tank refill |
+| `DIRTY_ML_PER_PUMP_S` | `1.7` | mL moved into the dirty tank per second of dirty pump running |
 | `LOW_PCT` | `20` | a tank is low below this percent remaining (clean) or free (dirty) |
 
 Restart after editing: reboot, or run `./install.sh tankwatch-install <ip>`
 again (it keeps your config).
 
-The defaults come from two measured mopping jobs, each started with a full
-clean tank and an empty dirty tank:
+The defaults come from three measured mopping jobs, each started with a full
+clean tank and an empty dirty tank and had four pad washes:
 
 | Job | Flow (unit-seconds) | Refill | Dirty pump | Clean used | Dirty collected |
 |-----|---------------------|--------|------------|------------|-----------------|
 | A   | 69,730              | 110 s  | 645 s      | about 1.5 L | about 0.9 L    |
 | B   | 44,554              | 110 s  | 425 s      | about 1.1 L | about 0.82 L   |
+| C   | 51,936              | 60 s   | 490 s      | about 1.17 L | about 0.82 L  |
 
-Clean: the flow (1/60) and refill (3.1) constants were fitted on job A and
-predicted job B within 2% (1083 mL against about 1100 mL), so they were kept.
-Solving both jobs exactly gives 0.0159 and 3.56, but the difference is inside
-the measuring error.
+Clean: the flow and refill constants were first fitted on job A (1/60 and 3.1).
+They predicted job B within 2% but job C about 10% low, so all three jobs were
+fitted together. With 0.0193 and 1.9 the estimates are 1,555, 1,068 and
+1,116 mL, each within 5% of the measured value. Hand measurements are good to
+about 50 mL, so the split between the flow and refill terms is still loose.
 
-Dirty: pump time is a weak predictor. It comes to 1.40 mL/s on job A and
-1.93 mL/s on job B. The default of 1.9 is deliberately the higher value, so the
-"tank full" warning comes early rather than late.
+Dirty: pump time is a weak predictor. It comes to 1.40, 1.93 and 1.67 mL/s on
+jobs A, B and C. The default of 1.7 is the mean; the estimates are +22%, -12%
+and +2% off. All three jobs had four washes and collected about 210 mL per
+wash (within 6%) while pump time varied from 425 to 645 s, so water per wash
+may fit better than pump time. That is untested, and tankwatch still uses pump
+time.
 
 ## Calibrating for your dock
 
@@ -143,9 +149,9 @@ Do this after a mopping job, before you touch the tanks.
 6. Restart tankwatch (`./install.sh tankwatch-install 192.168.1.50`).
 
 One job can't tell the flow term from the refill term, so the single factor in
-step 5 is a compromise. To separate them, repeat on a second job with a
-different number of washes (for example a different room count), as the
-defaults were, collect the logs with `./install.sh collect-logs 192.168.1.50`, and solve for the two
+step 5 is a compromise. To separate them, repeat on more jobs with a different
+number of washes (for example a different room count), as the defaults were,
+collect the logs with `./install.sh collect-logs 192.168.1.50`, and solve for the two
 constants. `tools/tankwatch-replay.sh <log>...` runs data and manager logs
 through the same model on your computer and prints the resulting state, so you
 can try constants against logs you already have. The manager logs are needed
@@ -163,7 +169,7 @@ what the estimate was at that moment.
   stopped is dropped.
 - The clean tank always needs a manual reset after refilling.
 - It is an estimate. It does not stop or block a mopping job.
-- The model is fitted to one dock and one cleaning pattern. Your wash settings
+- The model is fitted to one dock and one cleaning pattern (four washes per job). Your wash settings
   (water temperature, wash frequency) may use water differently.
 
 ## How it was found
